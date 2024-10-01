@@ -1,3 +1,3 @@
 # mc-server-mod-updater
 
-a utility that can update minecraft server mods
+a pacman style mod manager for minecraft
