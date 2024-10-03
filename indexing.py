@@ -2,6 +2,8 @@
 import os, toml
 
 def mcmm(slug, mod_data):
+	if not os.path.exists(os.path.expanduser(f"{instance_dir}/.content/")):
+		os.makedirs(os.path.expanduser(f"{instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
 	index = {}
 	index['index-version'] = 1
@@ -17,11 +19,13 @@ def mcmm(slug, mod_data):
 	index['source'] ='modrinth'
 	index['game-version'] = minecraft_version
 	index['reason'] = "explicit"
-	toml.dump(index, open(f"{instance_dir}/mods/.index/{slug}.mm.toml", 'w',  encoding='utf-8'))
+	toml.dump(index, open(f"{instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8'))
 	if "index-compatibility" in instancecfg and instancecfg["index-compatibility"] == "prism":
 		prism(slug, mod_data)
 
 def prism(slug, mod_data):
+	if not os.path.exists(os.path.expanduser(f"{instance_dir}/mods/.index")):
+		os.makedirs(os.path.expanduser(f"{instance_dir}/mods/.index"))
 	cache_data = toml.load(f"{cachedir}/modrinth-api/{slug}.mm.toml")["mod-api"]
 	index = {}
 	index["filename"] = mod_data["files"][0]["filename"]

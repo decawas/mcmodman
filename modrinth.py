@@ -25,14 +25,41 @@ def get_mod(slug, mod_data, index):
 		os.system(f"rm -rf {instance_dir}/mods/{index['filename']}")
 
 def parse_api(api_data):
+	if api_data["project_type"] == "modpack":
+		print(f"{api_data["slug"]} is a modpack")
+		return "Modpack"
+
+	if api_data["project_type"] == "mod":
+		if instancecfg["loader"] in api_data["loaders"]:
+			mod_loader = instancecfg["loader"]
+		elif "datapack" in api_data["loaders"]:
+			mod_loader = "datapack"
+			if not "server.properties" in os.listdir(f"{instance_dir}"):
+				print("currently, mcmodman only supports datapacks for servers")
+				mod_loader = "none"
+		else:
+			mod_loader = "none"
+	elif api_data["project_type"] == "shader" and "optifine" in api_data["loaders"]:
+		mod_loader = "optifine"
+		if not ("optifine.mm.toml" in os.listdir(f"{instance_dir}/.content") and "iris.mm.toml" in os.listdir(f"{instance_dir}/.content")):
+			print(f"\033[1;33;40mCaution: shader '{api_data["slug"]}' requires optifine or iris but neither is installed\033[0;37;40m")
+	elif api_data["project_type"] == "shader" and "canvas" in api_data["loaders"]:
+		mod_loader = "canvas"
+		if not "canvas.mm.toml" in os.listdir(f"{instance_dir}/.content"):
+			print(f"\033[1;33;40mCaution: shader '{api_data["slug"]}' requires canvas but canvas is not installed\033[0;37;40m")
+	elif api_data["project_type"] == "shader" and "vanilla" in api_data["loaders"]:
+		mod_loader = "vanilla"
+	elif api_data["project_type"] == "resourcepack":
+		mod_loader = "minecraft"
+
 	matches = []
 	if config["include-beta"]:
 		allowed_version_types = ["release", "beta", "alpha"]
 	else:
 		allowed_version_types = ["release"]
-		for version in api_data:
-			if version["version_type"] in allowed_version_types and minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
-				matches.append(version)
+	for version in api_data["versions"]:
+		if version["version_type"] in allowed_version_types and minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
+			matches.append(version)
 	if not matches:
 		print("No matching versions found")
 		return "No version"
@@ -43,33 +70,30 @@ def parse_api(api_data):
 def get_api(slug):
 	if os.path.exists(f"{cachedir}/modrinth-api/{slug}.mm.toml"):
 		cache_data = toml.load(f"{cachedir}/modrinth-api/{slug}.mm.toml")
-		if time.time() - cache_data["time"] < config["api-expire"] and cache_data["api-cache-version"] == 1:
+		if time.time() - cache_data["time"] < config["api-expire"] and cache_data["api-cache-version"] == 2:
 			print("Using cached api data")
 			mod_data = cache_data["mod-api"]
-			version_data = cache_data["version-api"]
 		else:
 			del cache_data
 	if "cache_data" not in locals():
 		print("Fetching api data")
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		response = requests.get(url, headers={'User-Agent': 'discord: .ekno (there is a . dont forget it), github: no github repo just yet sorry'}, timeout=30)
-		try:
-			response.raise_for_status()
-		except:
+		if response.status_code != 200:
 			print(f"Mod '{slug}' not found")
 			raise SystemExit
 		mod_data = response.json()
 		url = f"https://api.modrinth.com/v2/project/{slug}/version"
 		response = requests.get(url, headers={'User-Agent': 'discord: .ekno (there is a . dont forget it), github: no github repo just yet sorry'}, timeout=30)
 		response.raise_for_status()
-		version_data = response.json()
+		mod_data["versions"] = response.json()
 
-		cache_data = {"time": time.time(), "api-cache-version": 1, "mod-api": mod_data, "version-api": version_data}
+		cache_data = {"time": time.time(), "api-cache-version": 2, "mod-api": mod_data}
 		with open(f"{cachedir}/modrinth-api/{slug}.mm.toml", 'w',  encoding='utf-8') as file:
 			print("Caching api data")
 			toml.dump(cache_data, file)
 
-	return [mod_data, version_data]
+	return mod_data
 
 if os.path.exists(os.path.expanduser("~/.config/ekno/mcmodman/config.toml")):
 	config = toml.load(os.path.expanduser("~/.config/ekno/mcmodman/config.toml"))
@@ -78,8 +102,9 @@ else:
 	os.makedirs(os.path.expanduser("~/.config/ekno/mcmodman"))
 	toml.dump(config, open(os.path.expanduser("~/.config/ekno/mcmodman/config.toml"), 'w',  encoding='utf-8'))
 
+
 if config['cache-dir'] == "autodetect":
-	cachedir = os.path.expanduser("~/.cache/mcmodman")
+	cachedir = os.path.expanduser("~/.cache/ekno/mcmodman")
 elif config['cache-dir'] != "autodetect":
 	cachedir = os.path.expanduser(config['cache-dir'])
 if not os.path.exists(cachedir):
@@ -87,12 +112,13 @@ if not os.path.exists(cachedir):
 	os.makedirs(f"{cachedir}/mods")
 	os.makedirs(f"{cachedir}/modrinth-api")
 
-instance_dir = config["instances"][0]["path"]
+instance_dir = os.path.expanduser(config["instances"][0]["path"])
 
 if os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
 	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
-	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 else:
-	mod_loader = ""
 	minecraft_version = ""
+
+if not os.path.exists(f"{instance_dir}/.content"):
+	os.mkdir(f"{instance_dir}/.content")
