@@ -7,7 +7,7 @@ def instance_firstrun():
 	managefile = "# this instance is managed by mcmodman\n# please do not change any files that might break mcmodman"
 	loaders = []
 
-	log = open(f"{instance_dir}/logs/latest.log", "r", encoding="utf-8").read()
+	log = open(os.path.expanduser(f"{instance_dir}/logs/latest.log"), "r", encoding="utf-8").read()
 
 	if os.path.exists(f"{instance_dir}/.fabric"):
 		loaders.append("fabric")
@@ -29,7 +29,7 @@ def instance_firstrun():
 		print("mcmodman does not support instances with multiple loaders")
 		return "Multiple Loader"
 	elif len(loaders) < 1:
-		print("Could not find any mod loaders for this instance\nif you are using Rift or RML you will have to manually set that")
+		print("Could not find any mod loaders for this instance\nif you are using Vanilla, Rift or RML you will have to manually set that")
 		return "No Loader"
 	managefile += f"\nloader = \"{loaders[0]}\""
 	mod_loader = loaders[0]
@@ -59,8 +59,8 @@ def instance_firstrun():
 
 	with open(f"{instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
 		f.write(managefile)
-	if not os.path.exists(f"{instance_dir}/mods/.index"):
-		os.makedirs(f"{instance_dir}/mods/.index")
+	if not os.path.exists(f"{instance_dir}/.content"):
+		os.makedirs(f"{instance_dir}/.content")
 
 def add_file(filename):
 	if not os.path.exists(filename):
@@ -87,21 +87,21 @@ def add_file(filename):
 	index['hash-format'] ='sha512'
 	index['mode'] = 'file'
 	index['source'] = 'local'
-	with open(f"{instance_dir}/mods/.index/{filename}.mm.toml", "w", encoding="utf-8") as f:
+	with open(f"{instance_dir}/.content/{filename}.mm.toml", "w", encoding="utf-8") as f:
 		toml.dump(index, f)
 	print(f"Mod '{filename}' successfully added")
 	return "Added"
 
 def add_mod(slug):
-	if os.path.exists(f"{instance_dir}/mods/.index/{slug}.mm.toml"):
-		index = toml.load(f"{instance_dir}/mods/.index/{slug}.mm.toml")
+	if os.path.exists(f"{instance_dir}/.content/{slug}.mm.toml"):
+		index = toml.load(f"{instance_dir}/.content/{slug}.mm.toml")
 	elif not args.U:
 		index = {"filename": "-", "version": "None", "version-id": "None"}
 	else:
 		print(f"Mod '{slug}' not installed")
 		return "No mod"
 
-	api_data = modrinth.get_api(slug)[1]
+	api_data = modrinth.get_api(slug)
 	parsed = modrinth.parse_api(api_data)[0]
 	if isinstance(parsed, str):
 		return parsed
@@ -114,15 +114,16 @@ def add_mod(slug):
 	if not os.path.exists(f"{cachedir}/mods/{parsed['files'][0]['filename']}.mm.toml"):
 		print(f"Caching mod '{slug}'")
 		os.system(f"cp {instance_dir}/mods/{parsed['files'][0]['filename']} {cachedir}/mods/{parsed['files'][0]['filename']}")
-		os.system(f"cp {instance_dir}/mods/.index/{slug}.mm.toml {cachedir}/mods/{parsed['files'][0]['filename']}.mm.toml")
+		os.system(f"cp {instance_dir}/.content/{slug}.mm.toml {cachedir}/mods/{parsed['files'][0]['filename']}.mm.toml")
 	print(f"Mod '{slug}' successfully updated")
 
 def remove_mod(slug):
-	if os.path.exists(f"{instance_dir}/mods/.index/{slug}.mm.toml"):
-		index = toml.load(f"{instance_dir}/mods/.index/{slug}.mm.toml")
-		os.system(f"rm -f {instance_dir}/mods/{index['filename']}")
-		os.system(f"rm -f {instance_dir}/mods/.index/{slug}.mm.toml")
-		os.system(f"rm -f {instance_dir}/mods/.index/{slug}.pw.toml")
+	if os.path.exists(f"{instance_dir}/.content/{slug}.mm.toml"):
+		index = toml.load(f"{instance_dir}/.content/{slug}.mm.toml")
+		os.remove(f"{instance_dir}/mods/{index['filename']}")
+		os.remove(f"{instance_dir}/.content/{slug}.mm.toml")
+		if "index-compatibility" in config:
+			os.remove(f"{instance_dir}/.content/{slug}.pw.toml")
 		print(f"Removed mod '{slug}'")
 	else:
 		print(f"Mod '{slug}' is not installed")
@@ -142,19 +143,19 @@ def confirm(slug, mod_data, index):
 
 def query_mod(slug):
 	if isinstance(slug, bool):
-		for file in os.listdir(f"{instance_dir}/mods/.index"):
+		for file in os.listdir(f"{instance_dir}/.content"):
 			if ".mm.toml" in file:
-				index = toml.load(f"{instance_dir}/mods/.index/{file}")
+				index = toml.load(f"{instance_dir}/.content/{file}")
 				print(f"{file[:-8]} {index["version"]}")
 	elif isinstance(slug, str):
-		if os.path.exists(f"{instance_dir}/mods/.index/{slug}.mm.toml"):
-			index = toml.load(f"{instance_dir}/mods/.index/{slug}.mm.toml")
+		if os.path.exists(f"{instance_dir}/.content/{slug}.mm.toml"):
+			index = toml.load(f"{instance_dir}/.content/{slug}.mm.toml")
 			print(f"{slug} {index['version']}")
 		else:
 			print(f"Mod '{slug}' was not found")
 
 def toggle_mod(slug):
-	index = toml.load(f"{instance_dir}/mods/.index/{slug}.mm.toml")
+	index = toml.load(f"{instance_dir}/.content/{slug}.mm.toml")
 	if os.path.exists(f"{instance_dir}/mods/{index["filename"]}"):
 		os.system(f"mv {instance_dir}/mods/{index['filename']} {instance_dir}/mods/{index['filename']}.disabled")
 		print(f"Mod '{slug}' has been disabled")
@@ -230,12 +231,10 @@ def main():
 			print("No mods installed")
 	elif args.T:
 		toggle_mod(args.T)
-	else:
+	elif os.path.exists(os.path.expanduser(f"{instance_dir}/mcmodman_managed.toml")):
 		print("No operation specified")
 		parser.print_help()
 		exit(1)
-
-	os.system(f"rm {instance_dir}/mcmodman.lock")
 
 if __name__ == "__main__":
 	if os.path.exists(os.path.expanduser("~/.config/ekno/mcmodman/config.toml")):
@@ -255,7 +254,6 @@ if __name__ == "__main__":
 		os.makedirs(f"{cachedir}/modrinth-api")
 
 	instance_dir = config['instances'][0]["path"]
-	print(instance_dir)
 
 	if os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
 		instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
@@ -281,3 +279,8 @@ if __name__ == "__main__":
 		main()
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
+	except Exception as e:
+		print("An unexpected error occured")
+		raise
+	finally:
+		os.remove(os.path.expanduser(f"{instance_dir}/mcmodman.lock"))
