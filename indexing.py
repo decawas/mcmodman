@@ -1,9 +1,9 @@
-# pylint: disable=E0601 disable=C0114 disable=C0115 disable=C0116 disable=C0411 disable=C0103 disable=W0707 disable=C0410 disable=C0321
-import os, toml
+# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606
+import os, toml, instance
 
 def mcmm(slug, mod_data):
-	if not os.path.exists(os.path.expanduser(f"{instance_dir}/.content/")):
-		os.makedirs(os.path.expanduser(f"{instance_dir}/.content/"))
+	if not os.path.exists(os.path.expanduser(f"{instance.instance_dir}/.content/")):
+		os.makedirs(os.path.expanduser(f"{instance.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
 	index = {}
 	index['index-version'] = 1
@@ -17,16 +17,16 @@ def mcmm(slug, mod_data):
 	index['mode'] = 'url'
 	index['url'] = mod_data["files"][0]["url"]
 	index['source'] ='modrinth'
-	index['game-version'] = minecraft_version
+	index['game-version'] = instance.minecraft_version
 	index['reason'] = "explicit"
-	toml.dump(index, open(f"{instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8'))
-	if "index-compatibility" in instancecfg and instancecfg["index-compatibility"] == "prism":
+	toml.dump(index, open(f"{instance.instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8'))
+	if "index-compatibility" in instance.instancecfg and instance.instancecfg["index-compatibility"] == "prism":
 		prism(slug, mod_data)
 
 def prism(slug, mod_data):
-	if not os.path.exists(os.path.expanduser(f"{instance_dir}/mods/.index")):
-		os.makedirs(os.path.expanduser(f"{instance_dir}/mods/.index"))
-	cache_data = toml.load(f"{cachedir}/modrinth-api/{slug}.mm.toml")["mod-api"]
+	if not os.path.exists(os.path.expanduser(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/.index")):
+		os.makedirs(os.path.expanduser(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/.index"))
+	cache_data = toml.load(f"{instance.cachedir}/modrinth-api/{slug}.mm.toml")["mod-api"]
 	index = {}
 	index["filename"] = mod_data["files"][0]["filename"]
 	index["name"] = cache_data["title"]
@@ -44,29 +44,5 @@ def prism(slug, mod_data):
 	index["update"] = {"modrinth": {"mod-id": mod_data["project_id"] ,"version": mod_data["id"]}}
 	index = toml.dumps(index)[:-1]
 	index = index.replace('"', "'")
-	with open(f"{instance_dir}/mods/.index/{slug}.pw.toml", 'w',  encoding='utf-8') as file:
+	with open(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/.index/{slug}.pw.toml", 'w',  encoding='utf-8') as file:
 		file.write(index)
-
-if os.path.exists(os.path.expanduser("~/.config/ekno/mcmodman/config.toml")):
-	config = toml.load(os.path.expanduser("~/.config/ekno/mcmodman/config.toml"))
-else:
-	config = {"instances": [{"name": ".minecraft", "path": "~/.minecraft", "id": "0"}], "cache-dir": "autodetect", "include-beta": False, "api-expire": 3600, "checksum": "Always"}
-	os.makedirs(os.path.expanduser("~/.config/ekno/mcmodman"))
-	toml.dump(config, open(os.path.expanduser("~/.config/ekno/mcmodman/config.toml"), 'w',  encoding='utf-8'))
-
-if config['cache-dir'] == "autodetect":
-	cachedir = os.path.expanduser("~/.cache/mcmodman")
-elif config['cache-dir'] != "autodetect":
-	cachedir = os.path.expanduser(config['cache-dir'])
-if not os.path.exists(cachedir):
-	os.makedirs(cachedir)
-	os.makedirs(f"{cachedir}/mods")
-	os.makedirs(f"{cachedir}/modrinth-api")
-
-instance_dir = config["instances"][0]["path"]
-
-if os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
-	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
-	minecraft_version = instancecfg["version"]
-else:
-	minecraft_version = ""
