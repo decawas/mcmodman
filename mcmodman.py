@@ -1,45 +1,21 @@
-# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606
-import argparse, hashlib, os, toml, time, instance
+# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606 W1203 I1101
+# pylint: disable=W0718
+import os, toml
+import logging
+from shutil import copyfile
+from time import time
 
-__version__ = "24.309rv1" # 24,11,05
-
-def add_file(filename):
-	if not os.path.exists(filename):
-		print("The specified file does not exist")
-		return "No file"
-	if not filename.endswith(".jar"):
-		print(f"file '{filename}' is not a jar file")
-		return "No jar"
-	print(f"\nMod '{filename}' Unknown version\n" )
-	yn = input("Proceed with addition? [Y/n]: ")
-	if yn.lower() != 'y' and yn.lower() != '':
-		return "No add"
-	print("Moving file")
-	os.system(f"cp {filename} {instance.instance_dir}/{instance.instancecfg["modfolder"]}/{filename}") # TODO: change a to cross platform call
-	print("Indexing mod")
-	index = {}
-	index['index-version'] = 1
-	index['filename'] = filename
-	index['slug'] = filename
-	index['mod-id'] = filename
-	index['version'] = "Unknown"
-	index['version-id'] = "XXXX"
-	index['hash'] = hashlib.sha512(open(filename, 'rb').read())
-	index['hash-format'] ='sha512'
-	index['mode'] = 'file'
-	index['source'] = 'local'
-	with open(f"{instance.instance_dir}/.content/{filename}.mm.toml", "w", encoding="utf-8") as f:
-		toml.dump(index, f)
-	print(f"Mod '{filename}' successfully added")
-	return "Added"
+__version__ = "sparrow-6e4b838f07+1"
 
 def add_mod(slugs):
 	indexes = []
 	for slug in slugs:
-		if os.path.exists(f"{instance.instance_dir}/.content/{slug}.mm.toml"):
-			indexes.append(toml.load(f"{instance.instance_dir}/.content/{slug}.mm.toml"))
-		elif not args.U:
+		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
+			indexes.append(toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml"))
+			logger.info(f"Loaded index for mod '{slug}'")
+		elif not commons.args.update:
 			indexes.append({"slug": f"{slug}","filename": "-", "version": "None", "version-id": "None"})
+			logger.info(f"Created dummy index for mod new '{slug}'")
 
 	if not indexes:
 		print("all mods updated or not found")
@@ -48,50 +24,54 @@ def add_mod(slugs):
 	api_data, parsed, parsed2, slugs2, indexes2 = [], [], [], [], []
 	for slug in slugs:
 		api_data.append(modrinth.get_api(slug))
+		if isinstance(api_data, dict):
+			logger.info(f"Successfully got api_data for mod '{slug}'")
 	i, j = 0, len(slugs)
 	while i < j:
 		parsed.append(modrinth.parse_api(api_data[i])[0])
 		if isinstance(parsed[-1], str):
 			pass
-		elif not parsed[-1]["id"] == indexes[i]["version-id"]:
+		elif parsed[-1]["id"] != indexes[i]["version-id"]:
 			parsed2.append(parsed[i])
 			slugs2.append(slugs[i])
 			indexes2.append(indexes[i])
 		i += 1
 
+	if not parsed2:
+		print("all mods up to date")
+		return "No mod"
+
 	confirm(slugs2, parsed2, indexes2)
 	for i, slug in enumerate(slugs2):
 		modrinth.get_mod(slug, parsed2[i], indexes2[i])
+		logger.info(f"Sucessfully downloaded content '{slug}' ({parsed2[i]['files'][0]['size']} B)")
 		indexing.mcmm(slug, parsed[i])
-		if not os.path.exists(f"{instance.cachedir}/{instance.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']}.mm.toml"):
+		if not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']}.mm.toml"):
 			print(f"Caching mod '{slug}'")
-			os.system(f"cp {instance.instance_dir}/{instance.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']} {instance.cachedir}/mods/{parsed[i]['files'][0]['filename']}")
-			os.system(f"cp {instance.instance_dir}/.content/{slug}.mm.toml {instance.cachedir}/mods/{parsed[i]['files'][0]['filename']}.mm.toml")
+			copyfile(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']}", f"{commons.cache_dir}/mods/{parsed[i]['files'][0]['filename']}")
+			copyfile(f"{commons.instance_dir}/.content/{slug}.mm.toml", f"{commons.cache_dir}/mods/{parsed[i]['files'][0]['filename']}.mm.toml")
+			logger.info(f"Copied content '{slug}' to cache")
 		print(f"Mod '{slug}' successfully updated")
 
 def remove_mod(slugs):
 	for slug in slugs:
-		if os.path.exists(f"{instance.instance_dir}/.content/{slug}.mm.toml"):
-			index = toml.load(f"{instance.instance_dir}/.content/{slug}.mm.toml")
-			os.remove(f"{instance.instance_dir}/.content/{slug}.mm.toml")
-			os.remove(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index['filename']}")
-			if "index-compatibility" in instance.instancecfg:
-				os.remove(f"{instance.instance_dir}/.content/{slug}.pw.toml")
+		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
+			# TODO: add confirmation dialogue here
+			index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
+			os.remove(f"{commons.instance_dir}/.content/{slug}.mm.toml")
+			os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
+			logger.info(f"Removed content '{slug}'")
+			if "index-compatibility" in commons.instancecfg:
+				os.remove(f"{commons.instance_dir}/.content/{slug}.pw.toml")
 			print(f"Removed mod '{slug}'")
 		else:
 			print(f"Mod '{slug}' is not installed")
+			logger.error(f"Could not remove content '{slug}' because it is not installed")
 
 def confirm(slugs, mod_data, indexes):
 	print("")
-	totaloldsize = 0
-	totalnewsize = 0
-	for i, data in enumerate(mod_data):
-		totalnewsize += data['files'][0]['size']
-	for index in indexes:
-		if os.path.exists(f'{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index["filename"]}'):
-			totaloldsize += os.path.getsize(f'{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index["filename"]}')
-		else:
-			pass
+	totaloldsize = sum(os.path.getsize(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}') for index in indexes if os.path.exists(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}'))
+	totalnewsize = sum(data['files'][0]['size'] for data in mod_data)
 
 	for i, slug in enumerate(slugs):
 		print(f"Mod {slug} {indexes[i]["version"]} --> {mod_data[i]["version_number"]}")
@@ -100,129 +80,139 @@ def confirm(slugs, mod_data, indexes):
 	yn = input("\n:: Proceed with download? [Y/n]: ")
 	print("")
 	if yn.lower() != 'y' and yn != '':
-		raise SystemExit
-	else:
-		return "Yes"
+		raise RuntimeError("User declined download")
+	return "Yes"
 
 def query_mod(slugs):
-	for slug in slugs:
-		if isinstance(slug, bool):
-			for file in os.listdir(f"{instance.instance_dir}/.content"):
-				if ".mm.toml" in file:
-					index = toml.load(f"{instance.instance_dir}/.content/{file}")
-					print(f"{file[:-8]} {index["version"]}")
-		elif isinstance(slug, str):
-			if os.path.exists(f"{instance.instance_dir}/.content/{slug}.mm.toml"):
-				index = toml.load(f"{instance.instance_dir}/.content/{slug}.mm.toml")
+	if not slugs:
+		for file in os.listdir(f"{commons.instance_dir}/.content"):
+			if ".mm.toml" in file:
+				index = toml.load(f"{commons.instance_dir}/.content/{file}")
+				print(f"{file[:-8]} {index["version"]}")
+				logger.info(f"Found mod {file}")
+	else:
+		for slug in slugs:
+			if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
+				index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 				print(f"{slug} {index['version']}")
+				logger.info(f"Found mod {slug} ({index["mod-id"]}) version {index["version"]} ({index["version-id"]})")
 			else:
 				print(f"Mod '{slug}' was not found")
+				logger.info(f"Couldnt find index for mod {slug}")
 
 def toggle_mod(slugs):
 	for slug in slugs:
-		index = toml.load(f"{instance.instance_dir}/.content/{slug}.mm.toml")
-		if os.path.exists(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index["filename"]}"):
-			os.rename(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index['filename']} {instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index['filename']}.disabled")
+		index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
+		if os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}"):
+			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']} {commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled")
+			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled"
 			print(f"Mod '{slug}' has been disabled")
-		elif os.path.exists(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index["filename"]}.disabled"):
-			os.rename(f"{instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index['filename']}.disabled {instance.instance_dir}/{instance.instancecfg["modfolder"]}/{index['filename']}")
+			logger.info(f"Moved content '{slug}' from {index['filename']} to {index['filename']}.disabled")
+		elif os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}.disabled"):
+			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled {commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
+			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}"
 			print(f"Mod '{slug}' has been enabled")
+			logger.info(f"Moved content '{slug}' from {index['filename']}.disabled to {index['filename']}")
 
 def clear_cache():
-	if args.Rc and len(os.listdir(f'{instance.cachedir}/modrinth-api')) != 0:
-		for file in os.listdir(f"{instance.cachedir}/modrinth-api"):
-			cache_data = toml.load(f"{instance.cachedir}/modrinth-api/{file}")
-			if time.time() - cache_data["time"] > instance.config["api-expire"] and cache_data["api-cache-version"] == 1:
-				os.remove(f"{instance.cachedir}/modrinth-api/{file}")
-				print(f"Deleted cache for {file[:-8]}")
-			else:
-				pass
-	if args.Rcc or args.Rccc and len(os.listdir(f'{instance.cachedir}/modrinth-api')) != 0:
+	if commons.args.cc and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
+		for file in os.listdir(f"{commons.cache_dir}/modrinth-api"):
+			cache_data = toml.load(f"{commons.cache_dir}/modrinth-api/{file}")
+			if time() - cache_data["time"] > commons.config["api-expire"] and cache_data["api-cache-version"] != 2:
+				os.remove(f"{commons.cache_dir}/modrinth-api/{file}")
+				print(f"Deleted api cache for {file[:-8]} (expired)")
+				logger.info(f"Deleted cache for {file[:-8]}")
+	if commons.args.cc == any(["api", "content"]) and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
 		print("Are you sure you want to clear all api cache?\nThis action cannot be undone\n")
-		yn = input(":: Proceed with clearing api cache? [Y/n]: ")
+		yn = input(":: Proceed with clearing all api cache? [Y/n]: ")
 		print("")
 		if yn.lower() != 'y' and yn != '':
 			return "No clear"
-		else:
-			for file in os.listdir(f"{instance.cachedir}/modrinth-api"):
-				os.remove(f"{instance.cachedir}/modrinth-api/{file}")
-				print(f"Deleted api cache for {file[:-8]}")
-	if args.Rccc and len(os.listdir(f'{instance.cachedir}/mods')) != 0:
-		print("Are you sure you want to clear mod cache?\nThis action cannot be undone\n")
-		yn = input(":: Proceed with clearing mod cache? [y/N]: ")
+		for file in os.listdir(f"{commons.cache_dir}/modrinth-api"):
+			os.remove(f"{commons.cache_dir}/modrinth-api/{file}")
+			print(f"Deleted api cache for {file[:-8]}")
+			logger.info(f"Deleted api cache for {file[:-8]} (clear all)")
+	if commons.args.cc == "content" and len(os.listdir(f'{commons.cache_dir}/mods')) != 0:
+		print("Are you sure you want to clear content cache?\nThis action cannot be undone\n")
+		yn = input(":: Proceed with clearing content cache? [y/N]: ")
 		print("")
 		if yn.lower() != 'y':
 			return "No clear"
-		else:
-			for file in os.listdir(f"{instance.cachedir}/mods"):
-				if file.endswith(".jar"):
-					os.remove(f"{instance.cachedir}/{instance.instancecfg["modfolder"]}/{file}")
-					print(f"Deleted mod cache for {file}")
-				elif file.endswith(".mm.toml"):
-					os.remove(f"{instance.cachedir}/{instance.instancecfg["modfolder"]}/{file}")
-					print(f"Deleted index cache for {file[:-8]}")
+		for file in os.listdir(f"{commons.cache_dir}/mods"):
+			if file.endswith(".jar"):
+				os.remove(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{file}")
+				print(f"Deleted content cache for {file}")
+				logger.info(f"Deleted content cache for {file} (clear content cache)")
+			elif file.endswith(".mm.toml"):
+				os.remove(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{file}")
+				print(f"Deleted index cache for {file[:-8]}")
+				logger.info(f"Deleted index cache for {file[:-8]} (clear content cache)")
 	print("Finished clearing cache")
 
 def convert_bytes(size):
-	for unit in ['B', 'KB', 'MB']:
+	for unit in ['B', 'KB', 'MB', 'GB']:
 		if size < 1024:
 			break
 		size /= 1024.0
 	return f"{size:.2f} {unit}"
 
 def main():
-	if os.path.exists(f"{instance.instance_dir}/mcmodman.lock"):
-		print("mcmodman is already running for this instance")
-		raise SystemExit
-	else:
-		os.system(f"touch {instance.instance_dir}/mcmodman.lock")
+	if not commons.args.instance:
+		if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
+			print("mcmodman is already running for this instance")
+			logger.info("mcmodman.lock file already exists, exiting")
+			return None
 
-	if args.S:
-		add_mod(args.S)
-	elif args.Sf:
-		add_file(args.S)
-	elif args.U and isinstance(args.U, str):
-		add_mod(args.U)
-	elif args.R:
-		remove_mod(args.R)
-	elif args.Rc or args.Rcc or args.Rccc:
+		with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
+			logger.info("Setting lock")
+
+	if commons.args.addbyslug:
+		add_mod(commons.args.addbyslug)
+	elif commons.args.update:
+		add_mod(commons.args.update)
+	elif commons.args.remove:
+		remove_mod(commons.args.remove)
+	elif commons.args.cc:
 		clear_cache()
-	elif args.Q:
-		try:
-			query_mod(args.Q)
-		except FileNotFoundError:
-			print("No mods installed")
-	elif args.T:
-		toggle_mod(args.T)
-	elif args.version:
+	elif isinstance(commons.args.query, list):
+		query_mod(commons.args.query)
+	elif commons.args.toggle:
+		toggle_mod(commons.args.toggle)
+	elif commons.args.instance:
+		if commons.args.instance == "add":
+			commons.add_instance()
+		if commons.args.instance == "select":
+			commons.sel_instance()
+		if commons.args.instance == "remove":
+			commons.del_instance()
+	elif commons.args.version:
 		print(__version__)
-	elif os.path.exists(os.path.expanduser(f"{instance.instance_dir}/mcmodman_managed.toml")):
+	else:
 		print("No operation specified")
-		parser.print_help()
-		raise SystemExit
+		commons.parser.print_help()
+		logger.warning("No operation specified")
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description='mcmodman')
-	parser.add_argument('-S', nargs='+', type=str, help='-S [mod_slug]')
-	parser.add_argument('-Sf', nargs='?', type=str, help='-S [mod_slug]')
-	parser.add_argument('-U', nargs='+', type=str, help='-U [mod_slug]')
-	parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]')
-	parser.add_argument('-Rc', action="store_true", help='-Rc')
-	parser.add_argument('-Rcc', action="store_true", help='-Rcc')
-	parser.add_argument('-Rccc', action="store_true", help='-Rccc')
-	parser.add_argument('-Q', nargs='?', const=True, type=str, help='-Q [mod_slug]')
-	parser.add_argument('-T', nargs='?', const=True, type=str, help='-T [mod_slug]')
-	parser.add_argument('--version', action="store_true", help='-T [mod_slug]')
-	args=parser.parse_args()
-
-	import modrinth, indexing
+	logger = logging.getLogger(__name__)
+	logging.basicConfig(filename="testlog.log", level=logging.NOTSET)
+	logger.info(f"Starting mcmodman version {__version__}")
 
 	try:
+		import commons
+		import modrinth, indexing
+
 		main()
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
+		logger.info("Process interrupted by user")
+	except RuntimeError as e:
+		print("An error occurred while running mcmodman")
+		logger.critical(e)
 	except Exception as e:
 		print("An unexpected error occured")
-		raise
+		logger.critical(e)
 	finally:
-		os.remove(os.path.expanduser(f"{instance.instance_dir}/mcmodman.lock"))
+		if not commons.args.instance and  os.path.exists(os.path.expanduser(f"{commons.instance_dir}")):
+			logger.info("Removing lock")
+			os.remove(os.path.expanduser(f"{commons.instance_dir}/mcmodman.lock"))
+		logger.info("Exiting")
