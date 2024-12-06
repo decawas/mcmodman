@@ -182,15 +182,12 @@ if not args.instance:
 		os.makedirs(f"{cache_dir}/mods")
 		os.makedirs(f"{cache_dir}/modrinth-api")
 
-	if os.environ.get('MCMODMAN_INSTANCE', None) is not None:
-		selected_instance = os.environ.get('MCMODMAN_INSTANCE')
+	selected_instance = config["selected-instance"]
+	if selected_instance in instances.keys():
+		instance_dir = os.path.expanduser(instances[selected_instance]["path"])
 	else:
-		selected_instance = config["selected-instance"]
-		if selected_instance in instances.keys():
-			instance_dir = os.path.expanduser(instances[selected_instance]["path"])
-		else:
-			print("selected instance not found")
-			raise SystemExit
+		print("selected instance not found")
+		raise SystemExit
 
 	if not os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
 		instance_firstrun()
