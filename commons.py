@@ -2,6 +2,8 @@
 import os, appdirs, toml, re, logging  # type: ignore
 from argparse import ArgumentParser
 
+__version__ = "rc24.51.1"
+
 def instance_firstrun():
 	if os.path.exists(os.path.expanduser(f"{instance_dir}/logs/latest.log")):
 		with open(os.path.expanduser(f"{instance_dir}/logs/latest.log"), "r", encoding="utf-8") as f:
@@ -61,7 +63,7 @@ def instance_firstrun():
 		raise RuntimeError("mcmodman does not support instances with multiple loaders")
 	if not loaders:
 		print("Could not find any mod loaders for this instance\nif you are using Rift, RML or have no mod loader you will have to manually set that")
-		return "No Loader"
+		raise RuntimeError("mcmodman could not find any loaders for this instance")
 	managefile = {"loader": loaders[0]}
 
 	if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None:
@@ -72,7 +74,7 @@ def instance_firstrun():
 	if match:
 		managefile["version"] = f"{match.group(1)}"
 	else:
-		return "No version"
+		raise RuntimeError("mcmodman could not find a minecraft version")
 
 	comp = compdetect()
 	if comp is not None:
@@ -137,7 +139,6 @@ def del_instance():
 	print(f"Instance '{name}' not found")
 	return "no instance"
 
-logger = logging.getLogger(__name__)
 
 parser = ArgumentParser(description='mcmodman')
 parser.add_argument('-S', nargs='+', type=str, help='-S [mod_slug]', dest="addbyslug")
@@ -150,10 +151,13 @@ parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -
 parser.add_argument('--version', action="store_true", help='-version')
 args=parser.parse_args()
 
+config_dir = appdirs.user_config_dir("ekno/mcmodman")
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename=f"{config_dir}/mcmodman.log", level=logging.NOTSET)
+logger.info(f"Starting mcmodman version {__version__}")
 logger.info(f"Arguments: {args}")
 
-
-config_dir = appdirs.user_config_dir("ekno/mcmodman")
 logger.info(f"Config directory: {config_dir}")
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
@@ -188,7 +192,6 @@ if not args.instance:
 
 	if not os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
 		instance_firstrun()
-		print("suh")
 
 	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
 	mod_loader = instancecfg["loader"]
