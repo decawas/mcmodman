@@ -13,14 +13,13 @@ def get_mod(slug, mod_data, index):
 	else:
 		print(f"Downloading mod '{slug}'")
 		url = f"{mod_data['files'][0]['url']}"
-		response = get(url, headers={'User-Agent': 'discord: .ekno (there is a . dont forget it), github: no github repo just yet sorry'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		logger.info(f'Modrinth returned headers {response.headers}')
 		if response.status_code != 200:
 			logger.error(f'Modrinth download returned {response.status_code}')
 			return None
-		else:
-			with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "wb") as f:
-				f.write(response.content)
+		with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "wb") as f:
+			f.write(response.content)
 	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
 	elif commons.config["checksum"] == "Always" and os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
 	elif commons.config["checksum"] == "Never" and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = False
@@ -79,13 +78,13 @@ def get_api(slug):
 		logger.info(f"Could not find valid cache data for mod '{slug}' fetching api data for mod '{slug}' from modrinth")
 		print(f"Fetching api data for mod '{slug}'")
 		url = f"https://api.modrinth.com/v2/project/{slug}"
-		response = get(url, headers={'User-Agent': 'discord: .ekno (there is a . dont forget it), github: no github repo just yet sorry'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		if response.status_code != 200:
 			print(f"Mod '{slug}' not found")
 			raise SystemExit
 		mod_data = response.json()
 		url = f"https://api.modrinth.com/v2/project/{slug}/version"
-		response = get(url, headers={'User-Agent': 'discord: .ekno (there is a . dont forget it), github: no github repo just yet sorry'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		response.raise_for_status()
 		mod_data["versions"] = response.json()
 

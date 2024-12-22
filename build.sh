@@ -1,1 +1,1 @@
-pyinstaller --onefile mcmodman.py indexing.py instance.py modrinth.py
+pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py 

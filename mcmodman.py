@@ -5,8 +5,6 @@ import logging
 from shutil import copyfile
 from time import time
 
-__version__ = "sparrow-1f49d1c28e9+1"
-
 def add_mod(slugs):
 	indexes = []
 	for slug in slugs:
@@ -45,18 +43,28 @@ def add_mod(slugs):
 	for i, slug in enumerate(slugs2):
 		modrinth.get_mod(slug, parsed2[i], indexes2[i])
 		logger.info(f"Sucessfully downloaded content '{slug}' ({parsed2[i]['files'][0]['size']} B)")
-		indexing.mcmm(slug, parsed[i])
-		if not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']}.mm.toml"):
+		indexing.mcmm(slug, parsed2[i])
+		if not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{parsed2[i]['files'][0]['filename']}.mm.toml"):
 			print(f"Caching mod '{slug}'")
-			copyfile(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{parsed[i]['files'][0]['filename']}", f"{commons.cache_dir}/mods/{parsed[i]['files'][0]['filename']}")
-			copyfile(f"{commons.instance_dir}/.content/{slug}.mm.toml", f"{commons.cache_dir}/mods/{parsed[i]['files'][0]['filename']}.mm.toml")
+			copyfile(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{parsed2[i]['files'][0]['filename']}", f"{commons.cache_dir}/mods/{parsed2[i]['files'][0]['filename']}")
+			copyfile(f"{commons.instance_dir}/.content/{slug}.mm.toml", f"{commons.cache_dir}/mods/{parsed2[i]['files'][0]['filename']}.mm.toml")
 			logger.info(f"Copied content '{slug}' to cache")
 		print(f"Mod '{slug}' successfully updated")
 
 def remove_mod(slugs):
+	indexes = []
 	for slug in slugs:
 		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
-			# TODO: add confirmation dialogue here
+			indexes.append(toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml"))
+			logger.info(f"Loaded index for mod '{slug}'")
+		else:
+			print(f"Mod '{slug}' is not installed")
+			logger.error(f"Could not load index '{slug}' because it is not installed")
+
+	confirm(slugs, [], indexes)
+
+	for slug in slugs:
+		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
 			index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 			os.remove(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 			os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
@@ -71,16 +79,18 @@ def remove_mod(slugs):
 def confirm(slugs, mod_data, indexes):
 	print("")
 	totaloldsize = sum(os.path.getsize(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}') for index in indexes if os.path.exists(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}'))
-	totalnewsize = sum(data['files'][0]['size'] for data in mod_data)
+	totalnewsize = sum(data['files'][0]['size'] for data in mod_data) if mod_data else 0
+	changetype = "download" if mod_data else "remove"
 
 	for i, slug in enumerate(slugs):
-		print(f"Mod {slug} {indexes[i]["version"]} --> {mod_data[i]["version_number"]}")
-	print(f"\nTotal download size: {convert_bytes(totalnewsize)}")
+		print(f"Mod {slug} {indexes[i]['version']} --> {mod_data[i]['version_number'] if mod_data else None}")
+	print(f"\nTotal {changetype} size: {convert_bytes(totalnewsize if mod_data else totaloldsize)}")
 	print(f"Net upgrade Size: {convert_bytes(totalnewsize - totaloldsize)}")
 	yn = input("\n:: Proceed with download? [Y/n]: ")
 	print("")
 	if yn.lower() != 'y' and yn != '':
-		raise RuntimeError("User declined download")
+		logger.error(f"User declined {changetype}")
+		raise SystemExit
 	return "Yes"
 
 def query_mod(slugs):
@@ -151,21 +161,12 @@ def clear_cache():
 
 def convert_bytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
-		if size < 1024:
+		if -1024 < size < 1024:
 			break
 		size /= 1024.0
 	return f"{size:.2f} {unit}"
 
 def main():
-	if not commons.args.instance:
-		if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
-			print("mcmodman is already running for this instance")
-			logger.info("mcmodman.lock file already exists, exiting")
-			return None
-
-		with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
-			logger.info("Setting lock")
-
 	if commons.args.addbyslug:
 		add_mod(commons.args.addbyslug)
 	elif commons.args.update:
@@ -186,20 +187,27 @@ def main():
 		if commons.args.instance == "remove":
 			commons.del_instance()
 	elif commons.args.version:
-		print(__version__)
+		print(commons.__version__)
 	else:
 		print("No operation specified")
 		commons.parser.print_help()
 		logger.warning("No operation specified")
 
 if __name__ == "__main__":
-	logger = logging.getLogger(__name__)
-	logging.basicConfig(filename="testlog.log", level=logging.NOTSET)
-	logger.info(f"Starting mcmodman version {__version__}")
-
 	try:
 		import commons
 		import modrinth, indexing
+
+		logger = logging.getLogger(__name__)
+
+		if not commons.args.instance:
+			if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
+				print("mcmodman is already running for this instance")
+				logger.info("mcmodman.lock file already exists, exiting")
+				raise RuntimeError("mcmodman is already running for this instance")
+
+			with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
+				logger.info("Setting lock")
 
 		main()
 	except KeyboardInterrupt:
