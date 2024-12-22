@@ -8,7 +8,7 @@ from shutil import copyfile
 def get_mod(slug, mod_data, index):
 	if os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/")
+		copyfile(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}")
 		copyfile(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml", f"{commons.instance_dir}/.content/{slug}.mm.toml")
 	else:
 		print(f"Downloading mod '{slug}'")
@@ -19,7 +19,7 @@ def get_mod(slug, mod_data, index):
 			logger.error(f'Modrinth download returned {response.status_code}')
 			return None
 		else:
-			with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "w", encoding="utf8") as f:
+			with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "wb") as f:
 				f.write(response.content)
 	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
 	elif commons.config["checksum"] == "Always" and os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
