@@ -5,7 +5,7 @@ import logging
 from shutil import copyfile
 from time import time
 
-__version__ = "sparrow-6e4b838f07+1"
+__version__ = "sparrow-1f49d1c28e9+1"
 
 def add_mod(slugs):
 	indexes = []

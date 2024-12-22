@@ -74,14 +74,17 @@ def instance_firstrun():
 	else:
 		return "No version"
 
-	if os.path.exists(f"{instance_dir}/crafty_managed.txt"):
-		print("WARNING: THIS INSTANCE IS MANAGED BY CRAFTY CONTROLLER\nUSING mcmodman ON THIS INSTANCE MAY BREAK CERTAIN FEATURES OF CRAFTY CONTROLLER")
-		logger.warning("found craft_managed.txt for selected instance")
-		yn = input("If you wish to continue, type \"I understand, Break Crafty Controller management!\": ")
-		if yn != 'I understand, Break Crafty Controller management!':
-			print("Exiting")
-			raise SystemExit
+	comp = compdetect()
+	if comp is not None:
+		managefile["index-compatibity"] = comp
 
+	with open(f"{instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+		toml.dump(managefile, f)
+		logger.info("writing mcmodman_managed.toml to instance")
+	if not os.path.exists(f"{instance_dir}/.content"):
+		os.makedirs(f"{instance_dir}/.content")
+
+def compdetect():
 	if os.path.exists(f"{instance_dir}/../instance.cfg"):
 		if os.path.exists(f"{instance_dir}/../../../prismlauncher.cfg"):
 			print("mcmodman has detected that this instance is managed by prism launcher\nwould you like to enable dual indexing for prism launcher compatibility?")
@@ -91,16 +94,10 @@ def instance_firstrun():
 			logger.info("found instance.cfg and ploymc.cfg, instance is likely managed by PolyMC")
 		prismcomp = input(":: Enable dual indexing? [Y/n]: ")
 		if prismcomp.lower() == "y" or prismcomp == "":
-			managefile["index-compatibility"] = "packwiz"
+			return "packwiz"
 
-	if os.path.exists(f"{instance_dir}/../../profiles"):
-		print("mcmodman has detected that this instance is managed by modrinth\n")
+	return None
 
-	with open(f"{instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
-		toml.dump(managefile, f)
-		logger.info("witing mcmodman_managed.toml to instance")
-	if not os.path.exists(f"{instance_dir}/.content"):
-		os.makedirs(f"{instance_dir}/.content")
 
 def add_instance():
 	name = input(":: Enter instance name: ")
@@ -110,16 +107,16 @@ def add_instance():
 		return "instance"
 
 	instances[name] = {"name": name, "path": path}
-	with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
+	with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
 		toml.dump(instances, f)
 	print(f"Added instance '{name}'")
 
 def sel_instance():
 	name = input(":: Enter instance name: ")
 	if name in instances:
-		config["selected-instance"] = instances[name]
+		config["selected-instance"] = name
 		with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
-			toml.dump(instances, f)
+			toml.dump(config, f)
 		print(f"Selected instance '{name}'")
 		return "instance"
 	print(f"Instance '{name}' not found")
@@ -133,7 +130,7 @@ def del_instance():
 	for i, instance in enumerate(config["instances"]):
 		if instance["name"] == name:
 			del config["instances"][i]
-			with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
+			with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
 				toml.dump(instances, f)
 			print(f"Deleted instance '{name}'")
 			return "instance"
@@ -167,14 +164,14 @@ else:
 	config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft"}
 	toml.dump(config, open(f"{config_dir}/config.toml", 'w',  encoding='utf-8'))
 
-if not args.instance:
-	if not os.path.exists(f"{config_dir}/instances.toml"):
-		instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
-		toml.dump(instances, open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8'))
-	else:
-		instances = toml.load(f"{config_dir}/instances.toml")
-		logger.info(f"config {config}")
+if not os.path.exists(f"{config_dir}/instances.toml"):
+	instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
+	toml.dump(instances, open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8'))
+else:
+	instances = toml.load(f"{config_dir}/instances.toml")
+	logger.info(f"instances {instances}")
 
+if not args.instance:
 	cache_dir = appdirs.user_cache_dir("ekno/mcmodman")
 	logger.info(f"Cache directory: {cache_dir}")
 	if not os.path.exists(cache_dir):
