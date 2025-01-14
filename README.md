@@ -57,7 +57,7 @@ simply run
 ```
 pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py
 ```
-requires python and pyinstaller to be installed, the 'appdirs' module is also a dependency
+requires python and pyinstaller to be installed, the 'appdirs' and 'toml' modules are dependencies
 
 ## Installation
 

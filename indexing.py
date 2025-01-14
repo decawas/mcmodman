@@ -1,4 +1,4 @@
-# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606 W1203 I1101
+# pylint: disable=C0114 C0116 C0411 C0410 W1203
 import os, toml, commons
 
 def mcmm(slug, mod_data):
@@ -6,7 +6,8 @@ def mcmm(slug, mod_data):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
 	index = {'index-version': 1, 'filename': mod_data['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["project_id"], 'version': mod_data["version_number"], 'version-id': mod_data["id"], 'hash': mod_data['files'][0]['hashes']['sha512'], 'hash-format': 'sha512', 'mode': 'url', 'url': mod_data["files"][0]["url"], 'source': 'modrinth', 'game-version': commons.minecraft_version, 'reason': "explicit"}
-	toml.dump(index, open(f"{commons.instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8'))
+	with open(f"{commons.instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8') as f:
+		toml.dump(index, f)
 	if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz":
 		packwiz(slug, mod_data)
 

@@ -1,4 +1,5 @@
-# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606 W1203 I1101
+# pylint: disable=C0114 C0116 C0411 C0410 E0606 W1203
+# pylint: disable=W0621
 import os, appdirs, toml, re, logging  # type: ignore
 from argparse import ArgumentParser
 
@@ -100,7 +101,6 @@ def compdetect():
 
 	return None
 
-
 def add_instance():
 	name = input(":: Enter instance name: ")
 	path = input(":: Enter instance path: ")
@@ -153,7 +153,7 @@ args=parser.parse_args()
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) #TODO: resolve W1203
 logging.basicConfig(filename=f"{config_dir}/mcmodman.log", level=logging.NOTSET)
 logger.info(f"Starting mcmodman version {__version__}")
 logger.info(f"Arguments: {args}")
@@ -165,12 +165,14 @@ if not os.path.exists(config_dir):
 if os.path.exists(f"{config_dir}/config.toml"):
 	config = toml.load(f"{config_dir}/config.toml")
 else:
-	config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft"}
-	toml.dump(config, open(f"{config_dir}/config.toml", 'w',  encoding='utf-8'))
+	with open(f"{config_dir}/config.toml", "w", encoding="utf-8") as f:
+		config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft"}
+		toml.dump(config, f)
 
 if not os.path.exists(f"{config_dir}/instances.toml"):
-	instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
-	toml.dump(instances, open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8'))
+	with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
+		instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
+		toml.dump(instances, f)
 else:
 	instances = toml.load(f"{config_dir}/instances.toml")
 	logger.info(f"instances {instances}")
