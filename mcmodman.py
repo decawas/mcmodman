@@ -1,9 +1,10 @@
-# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606 W1203 I1101
+# pylint: disable=C0114 C0116 C0411 C0410 W1203
 # pylint: disable=W0718
-import os, toml
-import logging
+import os, toml, logging, commons, modrinth, indexing
 from shutil import copyfile
 from time import time
+
+logger = logging.getLogger(__name__)
 
 def add_mod(slugs):
 	indexes = []
@@ -114,12 +115,12 @@ def toggle_mod(slugs):
 	for slug in slugs:
 		index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 		if os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}"):
-			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']} {commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled")
+			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled")
 			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled"
 			print(f"Mod '{slug}' has been disabled")
 			logger.info(f"Moved content '{slug}' from {index['filename']} to {index['filename']}.disabled")
 		elif os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}.disabled"):
-			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled {commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
+			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
 			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}"
 			print(f"Mod '{slug}' has been enabled")
 			logger.info(f"Moved content '{slug}' from {index['filename']}.disabled to {index['filename']}")
@@ -195,11 +196,6 @@ def main():
 
 if __name__ == "__main__":
 	try:
-		import commons
-		import modrinth, indexing
-
-		logger = logging.getLogger(__name__)
-
 		if not commons.args.instance:
 			if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
 				print("mcmodman is already running for this instance")

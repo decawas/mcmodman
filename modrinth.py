@@ -1,4 +1,4 @@
-# pylint: disable=E0601 C0114 C0115 C0116 C0411 C0103 W0707 C0410 C0321 E0606 W1203 I1101
+# pylint: disable=C0114 C0116 C0411 C0410 E0606 W1203
 import os, toml, commons, logging
 from hashlib import sha512
 from time import time
@@ -13,20 +13,24 @@ def get_mod(slug, mod_data, index):
 	else:
 		print(f"Downloading mod '{slug}'")
 		url = f"{mod_data['files'][0]['url']}"
-		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		logger.info(f'Modrinth returned headers {response.headers}')
 		if response.status_code != 200:
 			logger.error(f'Modrinth download returned {response.status_code}')
 			return None
 		with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "wb") as f:
 			f.write(response.content)
-	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
-	elif commons.config["checksum"] == "Always" and os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = True
-	elif commons.config["checksum"] == "Never" and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"): perfcheck = False
+	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+		perfcheck = True
+	elif commons.config["checksum"] == "Always" and os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+		perfcheck = True
+	elif commons.config["checksum"] == "Never" and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+		perfcheck = False
 	else: perfcheck = True
 	if perfcheck:
 		print("Checking hash")
-		checksum = sha512(open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", 'rb').read()).hexdigest()
+		with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", 'rb') as f:
+			checksum = sha512(f.read()).hexdigest()
 		if mod_data["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
 			os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}")
@@ -60,7 +64,8 @@ def parse_api(api_data):
 		if version["version_type"] in allowed_version_types and commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
 			matches.append(version)
 	if not matches:
-		print("No matching versions found")
+		print(f"No matching versions found for mod '{api_data["slug"]}'")
+		logger.error(f"No matching versions found for mod '{api_data["slug"]}")
 		return "No version"
 	return matches
 
@@ -78,13 +83,13 @@ def get_api(slug):
 		logger.info(f"Could not find valid cache data for mod '{slug}' fetching api data for mod '{slug}' from modrinth")
 		print(f"Fetching api data for mod '{slug}'")
 		url = f"https://api.modrinth.com/v2/project/{slug}"
-		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		if response.status_code != 200:
 			print(f"Mod '{slug}' not found")
 			raise SystemExit
 		mod_data = response.json()
 		url = f"https://api.modrinth.com/v2/project/{slug}/version"
-		response = get(url, headers={'User-Agent': 'github: https://https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		response.raise_for_status()
 		mod_data["versions"] = response.json()
 
