@@ -7,85 +7,77 @@ from time import time
 logger = logging.getLogger(__name__)
 
 def add_mod(slugs):
-	indexes = []
-	for slug in slugs:
-		if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-			indexes.append(toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")))
-			logger.info(f"Loaded index for mod '{slug}'")
+	mods = [{'slug': slug} for slug in slugs]
+	for mod in mods:
+		if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml")):
+			mod["index"] = toml.load(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml"))
+			logger.info(f"Loaded index for mod '{mod['slug']}'")
 		elif not commons.args.update:
-			indexes.append({"slug": f"{slug}","filename": "-", "version": "None", "version-id": "None"})
-			logger.info(f"Created dummy index for mod new '{slug}'")
+			mod["index"] = {"slug": f"{mod['slug']}","filename": "-", "version": "None", "version-id": "None"}
+			logger.info(f"Created dummy index for mod new '{mod['slug']}'")
 
-	if not indexes:
+	if not any('index' in d for d in mods):
 		print("all mods updated or not found")
 		return "No mod"
 
-	api_data, parsed, parsed2, slugs2, indexes2 = [], [], [], [], []
-	for slug in slugs:
-		api_data.append(modrinth.get_api(slug))
-		if isinstance(api_data, dict):
-			logger.info(f"Successfully got api_data for mod '{slug}'")
-	i, j = 0, len(slugs)
-	while i < j:
-		parsed.append(modrinth.parse_api(api_data[i])[0])
-		if isinstance(parsed[-1], str):
-			pass
-		elif parsed[-1]["id"] != indexes[i]["version-id"]:
-			parsed2.append(parsed[i])
-			slugs2.append(slugs[i])
-			indexes2.append(indexes[i])
-		i += 1
+	for mod in reversed(mods):
+		mod["api_data"] = modrinth.get_api(mod["slug"])
+		if isinstance(mod["api_data"], dict):
+			logger.info(f"Successfully got api_data for mod '{mod['slug']}'")
+			mod["api_data"]["versions"] = modrinth.parse_api(mod["api_data"])
+			if isinstance(mod["api_data"], str) or mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
+				mods.remove(mod)
 
-	if not parsed2:
+	if not mods:
 		print("all mods up to date")
 		return "No mod"
 
-	confirm(slugs2, parsed2, indexes2)
-	for i, slug in enumerate(slugs2):
-		modrinth.get_mod(slug, parsed2[i], indexes2[i])
-		logger.info(f"Sucessfully downloaded content '{slug}' ({parsed2[i]['files'][0]['size']} B)")
-		indexing.mcmm(slug, parsed2[i])
-		if not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{parsed2[i]['files'][0]['filename']}.mm.toml")):
-			print(f"Caching mod '{slug}'")
-			copyfile(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], parsed2[i]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", parsed2[i]['files'][0]['filename']))
-			copyfile(f"{commons.instance_dir}/.content/{slug}.mm.toml", f"{commons.cache_dir}/mods/{parsed2[i]['files'][0]['filename']}.mm.toml")
-			logger.info(f"Copied content '{slug}' to cache")
-		print(f"Mod '{slug}' successfully updated")
+	confirm(mods, "download")
+	for mod in mods:
+		modrinth.get_mod(mod["slug"], mod["api_data"]["versions"][0], mod["index"])
+		logger.info(f"Sucessfully downloaded content '{mod['slug']}' ({mod['api_data']['versions'][0]['files'][0]['size']} B)")
+		indexing.mcmm(mod['slug'], mod['api_data']['versions'][0])
+		if not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")):
+			print(f"Caching mod '{mod['slug']}'")
+			copyfile(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod['api_data']['versions'][0]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", mod['api_data']['versions'][0]['files'][0]['filename']))
+			copyfile(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml", f"{commons.cache_dir}/mods/{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")
+			logger.info(f"Copied content '{mod['slug']}' to cache")
+		print(f"Mod '{mod['slug']}' successfully updated")
 
 def remove_mod(slugs):
-	indexes = []
-	for slug in slugs:
-		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
-			indexes.append(toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml"))
-			logger.info(f"Loaded index for mod '{slug}'")
+	mods = [{'slug': slug} for slug in slugs]
+	for mod in reversed(mods):
+		if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml")):
+			mod["index"] = (toml.load(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml")))
+			logger.info(f"Loaded index for mod '{mod['slug']}'")
 		else:
-			print(f"Mod '{slug}' is not installed")
-			logger.error(f"Could not load index '{slug}' because it is not installed")
+			print(f"Mod '{mod['slug']}' is not installed")
+			logger.error(f"Could not load index '{mod['slug']}' because it is not installed")
+			mods.remove(mod)
 
-	confirm(slugs, [], indexes)
+	if not mods:
+		print("no mods found")
+		return "No mod"
 
-	for slug in slugs:
-		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
-			index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
-			os.remove(f"{commons.instance_dir}/.content/{slug}.mm.toml")
-			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']))
-			logger.info(f"Removed content '{slug}'")
-			if "index-compatibility" in commons.instancecfg:
-				os.remove(f"{commons.instance_dir}/.content/{slug}.pw.toml")
-			print(f"Removed mod '{slug}'")
-		else:
-			print(f"Mod '{slug}' is not installed")
-			logger.error(f"Could not remove content '{slug}' because it is not installed")
+	confirm(mods, "remove")
 
-def confirm(slugs, mod_data, indexes):
+	for mod in mods:
+		os.remove(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml")
+		os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod['index']['filename']))
+		logger.info(f"Removed content '{mod['slug']}'")
+		if "index-compatibility" in commons.instancecfg:
+			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{mod['slug']}.pw.toml"))
+		print(f"Removed mod '{mod['slug']}'")
+
+
+def confirm(mods, changetype):
 	print("")
-	totaloldsize = sum(os.path.getsize(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}') for index in indexes if os.path.exists(f'{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}'))
-	totalnewsize = sum(data['files'][0]['size'] for data in mod_data) if mod_data else 0
-	changetype = "download" if mod_data else "remove"
+	totaloldsize = sum(os.path.getsize(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod["index"]["filename"])) for mod in mods if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod["index"]["filename"])))
+	totalnewsize = sum(mod["api_data"]["versions"][0]["files"][0]["size"] for mod in mods) if changetype == "download" else 0
 
-	for i, slug in enumerate(slugs):
-		print(f"Mod {slug} {indexes[i]['version']} --> {mod_data[i]['version_number'] if mod_data else None}")
-	print(f"\nTotal {changetype} size: {convert_bytes(totalnewsize if mod_data else totaloldsize)}")
+	for mod in mods:
+		print(f"Mod {mod['slug']} {mod['index']['version']} --> {mod['api_data']['versions'][0]['version_number'] if changetype == 'download' else None}")
+	print(f"\nTotal {changetype} size: {convert_bytes(totalnewsize if changetype == 'download' else totaloldsize)}")
 	print(f"Net upgrade Size: {convert_bytes(totalnewsize - totaloldsize)}")
 	yn = input("\n:: Proceed with download? [Y/n]: ")
 	print("")
@@ -215,6 +207,7 @@ if __name__ == "__main__":
 	except Exception as e:
 		print("An unexpected error occured")
 		logger.critical(e)
+		raise
 	finally:
 		if not commons.args.instance and  os.path.exists(os.path.expanduser(f"{commons.instance_dir}")):
 			logger.info("Removing lock")
