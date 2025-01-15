@@ -20,13 +20,16 @@ def get_mod(slug, mod_data, index):
 			return None
 		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["files"][0]["filename"]), "wb") as f:
 			f.write(response.content)
+
 	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = True
 	elif commons.config["checksum"] == "Always" and os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = True
 	elif commons.config["checksum"] == "Never" and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = False
-	else: perfcheck = True
+	else:
+		perfcheck = True
+
 	if perfcheck:
 		print("Checking hash")
 		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']), 'rb') as f:
@@ -71,14 +74,15 @@ def parse_api(api_data):
 
 
 def get_api(slug):
-	if os.path.exists(f"{commons.cache_dir}/modrinth-api/{slug}.mm.toml"):
-		cache_data = toml.load(f"{commons.cache_dir}/modrinth-api/{slug}.mm.toml")
+	if os.path.exists(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml")):
+		cache_data = toml.load(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"))
 		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["api-cache-version"] == 2:
 			print(f"Using cached api data for mod '{slug}'")
 			mod_data = cache_data["mod-api"]
-			logger.info(f"Found cached api data for mod '{slug}' at {commons.cache_dir}/modrinth-api/{slug}.mm.toml")
+			logger.info(f"Found cached api data for mod '{slug}' at {commons.cache_dir}/modrinth-api/{slug}.mmcache.toml")
 		else:
 			del cache_data
+
 	if "cache_data" not in locals():
 		logger.info(f"Could not find valid cache data for mod '{slug}' fetching api data for mod '{slug}' from modrinth")
 		print(f"Fetching api data for mod '{slug}'")
@@ -94,11 +98,37 @@ def get_api(slug):
 		mod_data["versions"] = response.json()
 
 		cache_data = {"time": time(), "api-cache-version": 2, "mod-api": mod_data}
-		logger.info(f"Caching api data for mod '{slug}' to {commons.cache_dir}/modrinth-api/{slug}.mm.toml")
-		with open(f"{commons.cache_dir}/modrinth-api/{slug}.mm.toml", 'w',  encoding='utf-8') as file:
+		logger.info(f"Caching api data for mod '{slug}' to {commons.cache_dir}/modrinth-api/{slug}.mmcache.toml")
+		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"), 'w',  encoding='utf-8') as file:
 			print(f"Caching api data for mod '{slug}'")
 			toml.dump(cache_data, file)
 
 	return mod_data
+
+def search_api(query):
+	if os.path.exists(os.path.join(commons.cache_dir, "modrinth-api", f"{query}.modrinthquery.toml")):
+		cache_data = toml.load(os.path.join(commons.cache_dir, "modrinth-api", f"{query}.modrinthquery.toml"))
+		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["query-cache-version"] == 0:
+			print(f"Using cached query data for mod query '{query}'")
+			query_data = cache_data["query-api"]
+			logger.info(f"Found cached query data for mod query '{query}' at {commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
+		else:
+			del cache_data
+
+	if "cache_data" not in locals():
+		logger.info(f"Could not find valid cache data for query '{query}'")
+		print(f"Querying modrinth with query '{query}'")
+		url = f"https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}&facets=[[\"project_types!=modpack\"],[\"versions:{commons.minecraft_version}\"],[\"categories:{commons.mod_loader}\"]]"
+		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+		response.raise_for_status()
+		query_data = response.json()
+
+		cache_data = {"time": time(), "query-cache-version": 0, "query-api": query_data}
+		logger.info(f"Caching data for query '{query}' to {commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
+		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{query}.modrinthquery.toml"), 'w',  encoding='utf-8') as file:
+			print(f"Caching data for query '{query}'")
+			toml.dump(cache_data, file)
+
+	return query_data
 
 logger = logging.getLogger(__name__)
