@@ -12,8 +12,8 @@ def mcmm(slug, mod_data):
 		packwiz(slug, mod_data)
 
 def packwiz(slug, mod_data):
-	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/.index")):
-		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/.index"))
+	if not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index"))):
+		os.makedirs(os.path.expanduser(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index")))
 	cache_data = toml.load(f"{commons.cache_dir}/modrinth-api/{slug}.mm.toml")["mod-api"]
 	index = {"filename": mod_data["files"][0]["filename"], "name": cache_data["title"]}
 	index["download"] = {"hash": mod_data["files"][0]["hashes"]["sha512"], "hash-format": "sha512", "mode": "url", "url": mod_data["files"][0]["url"]}
@@ -25,5 +25,5 @@ def packwiz(slug, mod_data):
 	elif cache_data["server_side"] == "unsupported":
 		index["side"] = "client"
 	index = toml.dumps(index)[:-1]
-	with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/.index/{slug}.pw.toml", 'w',  encoding='utf-8') as file:
+	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"index/{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
 		file.write(index)

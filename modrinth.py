@@ -6,10 +6,10 @@ from requests import get
 from shutil import copyfile
 
 def get_mod(slug, mod_data, index):
-	if os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+	if os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}")
-		copyfile(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml", f"{commons.instance_dir}/.content/{slug}.mm.toml")
+		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']))
+		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 	else:
 		print(f"Downloading mod '{slug}'")
 		url = f"{mod_data['files'][0]['url']}"
@@ -18,30 +18,30 @@ def get_mod(slug, mod_data, index):
 		if response.status_code != 200:
 			logger.error(f'Modrinth download returned {response.status_code}')
 			return None
-		with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data["files"][0]["filename"]}", "wb") as f:
+		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["files"][0]["filename"]), "wb") as f:
 			f.write(response.content)
-	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = True
-	elif commons.config["checksum"] == "Always" and os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+	elif commons.config["checksum"] == "Always" and os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = True
-	elif commons.config["checksum"] == "Never" and not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}.mm.toml"):
+	elif commons.config["checksum"] == "Never" and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
 		perfcheck = False
 	else: perfcheck = True
 	if perfcheck:
 		print("Checking hash")
-		with open(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}", 'rb') as f:
+		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()
 		if mod_data["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
-			os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{mod_data['files'][0]['filename']}")
+			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']))
 		return "Bad checksum"
-	if os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}"):
+	if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']})):
 		print("Removing old version")
-		os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
+		os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']}))
 
 def parse_api(api_data):
 	if api_data["project_type"] == "modpack":
-		print(f"{api_data["slug"]} is a modpack")
+		print(f"{api_data['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
 
@@ -52,7 +52,7 @@ def parse_api(api_data):
 			logger.error("mcmodman does not currently support datapacks, skipping")
 			return "Unsupported project type"
 	else:
-		logger.error(f"mcmodman does not currently support projects of type '{api_data["project_type"]}', skipping")
+		logger.error(f"mcmodman does not currently support projects of type '{api_data['project_type']}', skipping")
 		return "Unsupported project type"
 
 	if commons.config["include-beta"]:
@@ -64,8 +64,8 @@ def parse_api(api_data):
 		if version["version_type"] in allowed_version_types and commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
 			matches.append(version)
 	if not matches:
-		print(f"No matching versions found for mod '{api_data["slug"]}'")
-		logger.error(f"No matching versions found for mod '{api_data["slug"]}")
+		print(f"No matching versions found for mod '{api_data['slug']}'")
+		logger.error(f"No matching versions found for mod '{api_data['slug']}")
 		return "No version"
 	return matches
 
