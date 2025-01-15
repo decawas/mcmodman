@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 def add_mod(slugs):
 	indexes = []
 	for slug in slugs:
-		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
-			indexes.append(toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml"))
+		if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+			indexes.append(toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")))
 			logger.info(f"Loaded index for mod '{slug}'")
 		elif not commons.args.update:
 			indexes.append({"slug": f"{slug}","filename": "-", "version": "None", "version-id": "None"})
@@ -45,9 +45,9 @@ def add_mod(slugs):
 		modrinth.get_mod(slug, parsed2[i], indexes2[i])
 		logger.info(f"Sucessfully downloaded content '{slug}' ({parsed2[i]['files'][0]['size']} B)")
 		indexing.mcmm(slug, parsed2[i])
-		if not os.path.exists(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{parsed2[i]['files'][0]['filename']}.mm.toml"):
+		if not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{parsed2[i]['files'][0]['filename']}.mm.toml")):
 			print(f"Caching mod '{slug}'")
-			copyfile(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{parsed2[i]['files'][0]['filename']}", f"{commons.cache_dir}/mods/{parsed2[i]['files'][0]['filename']}")
+			copyfile(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], parsed2[i]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", parsed2[i]['files'][0]['filename']))
 			copyfile(f"{commons.instance_dir}/.content/{slug}.mm.toml", f"{commons.cache_dir}/mods/{parsed2[i]['files'][0]['filename']}.mm.toml")
 			logger.info(f"Copied content '{slug}' to cache")
 		print(f"Mod '{slug}' successfully updated")
@@ -68,7 +68,7 @@ def remove_mod(slugs):
 		if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
 			index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 			os.remove(f"{commons.instance_dir}/.content/{slug}.mm.toml")
-			os.remove(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
+			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']))
 			logger.info(f"Removed content '{slug}'")
 			if "index-compatibility" in commons.instancecfg:
 				os.remove(f"{commons.instance_dir}/.content/{slug}.pw.toml")
@@ -99,14 +99,14 @@ def query_mod(slugs):
 		for file in os.listdir(f"{commons.instance_dir}/.content"):
 			if ".mm.toml" in file:
 				index = toml.load(f"{commons.instance_dir}/.content/{file}")
-				print(f"{file[:-8]} {index["version"]}")
+				print(file[:-8], index["version"])
 				logger.info(f"Found mod {file}")
 	else:
 		for slug in slugs:
 			if os.path.exists(f"{commons.instance_dir}/.content/{slug}.mm.toml"):
 				index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
 				print(f"{slug} {index['version']}")
-				logger.info(f"Found mod {slug} ({index["mod-id"]}) version {index["version"]} ({index["version-id"]})")
+				logger.info(f"Found mod {slug} ({index['mod-id']}) version {index['version']} ({index['version-id']})")
 			else:
 				print(f"Mod '{slug}' was not found")
 				logger.info(f"Couldnt find index for mod {slug}")
@@ -114,14 +114,14 @@ def query_mod(slugs):
 def toggle_mod(slugs):
 	for slug in slugs:
 		index = toml.load(f"{commons.instance_dir}/.content/{slug}.mm.toml")
-		if os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}"):
-			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled")
-			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled"
+		if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index["filename"])):
+			os.rename(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled"))
+			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled")
 			print(f"Mod '{slug}' has been disabled")
 			logger.info(f"Moved content '{slug}' from {index['filename']} to {index['filename']}.disabled")
-		elif os.path.exists(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index["filename"]}.disabled"):
-			os.rename(f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}.disabled", f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}")
-			index['filename'] = f"{commons.instance_dir}/{commons.instancecfg["modfolder"]}/{index['filename']}"
+		elif os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled")):
+			os.rename(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']))
+			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}")
 			print(f"Mod '{slug}' has been enabled")
 			logger.info(f"Moved content '{slug}' from {index['filename']}.disabled to {index['filename']}")
 
@@ -151,11 +151,11 @@ def clear_cache():
 			return "No clear"
 		for file in os.listdir(f"{commons.cache_dir}/mods"):
 			if file.endswith(".jar"):
-				os.remove(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{file}")
+				os.remove(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], file))
 				print(f"Deleted content cache for {file}")
 				logger.info(f"Deleted content cache for {file} (clear content cache)")
 			elif file.endswith(".mm.toml"):
-				os.remove(f"{commons.cache_dir}/{commons.instancecfg["modfolder"]}/{file}")
+				os.remove(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], file))
 				print(f"Deleted index cache for {file[:-8]}")
 				logger.info(f"Deleted index cache for {file[:-8]} (clear content cache)")
 	print("Finished clearing cache")
