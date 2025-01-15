@@ -3,7 +3,7 @@
 import os, appdirs, toml, re, logging  # type: ignore
 from argparse import ArgumentParser
 
-__version__ = "rc24.51.1"
+__version__ = "25.3"
 
 def instance_firstrun():
 	if os.path.exists(os.path.expanduser(f"{instance_dir}/logs/latest.log")):
