@@ -58,6 +58,7 @@ def instance_firstrun():
 		loaders.append("sponge")
 		match = re.search(r'spongevanilla-(\d+(?:\.\d+)*)-', log)
 		logger.info("found loader 'Sponge'")
+	#TODO: deal with the monstrosity that is loader detection
 
 	if len(loaders) > 1:
 		print("mcmodman does not support instances with multiple loaders")
@@ -146,6 +147,7 @@ parser.add_argument('-U', nargs='+', type=str, help='-U [mod_slug]', dest="updat
 parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]', dest="remove")
 parser.add_argument('-Q', nargs='*', type=str, help='-Q [mod_slug]', dest="query")
 parser.add_argument('-T', nargs='+', type=str, help='-T [mod_slug]', dest="toggle")
+parser.add_argument('-F', nargs='+', type=str, help='-F [search query]', dest="search")
 parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove')
 parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all')
 parser.add_argument('--version', action="store_true", help='-version')

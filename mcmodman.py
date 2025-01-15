@@ -117,14 +117,28 @@ def toggle_mod(slugs):
 			print(f"Mod '{slug}' has been enabled")
 			logger.info(f"Moved content '{slug}' from {index['filename']}.disabled to {index['filename']}")
 
+def search_mod(query):
+	query = " ".join(query)
+	logger.info(f"Getting search data for query '{query}'")
+	query_data = modrinth.search_api(query)
+	if not query_data["hits"]:
+		print(f"No results found for query '{query}'")
+		logger.info(f"No results found for query '{query}'")
+		return "no results"
+	for hit in reversed(query_data["hits"]):
+		a = f'{hit["slug"]}.mm.toml'
+		logger.info(f"Got hit '{hit['slug']}' for query '{query}' with facets: [[\"project_types!=modpack\"],[\"versions:{commons.minecraft_version}\"],[\"categories:{commons.mod_loader}\"]]")
+		print(f"modrinth/{hit['slug']} by {hit['author']} {'[Installed]' if os.path.exists(os.path.join(commons.instance_dir, '.content', a)) else ''}")
+		print(f"\t{hit['description'].splitlines()[0]}")
+
 def clear_cache():
 	if commons.args.cc and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
 		for file in os.listdir(f"{commons.cache_dir}/modrinth-api"):
 			cache_data = toml.load(f"{commons.cache_dir}/modrinth-api/{file}")
-			if time() - cache_data["time"] > commons.config["api-expire"] and cache_data["api-cache-version"] != 2:
+			if time() - cache_data["time"] > commons.config["api-expire"] or ("api-cache-version" in cache_data and cache_data["api-cache-version"] != 2) or ("query-cache-version" in cache_data and cache_data["query-cache-version"] != 0):
 				os.remove(f"{commons.cache_dir}/modrinth-api/{file}")
-				print(f"Deleted api cache for {file[:-8]} (expired)")
-				logger.info(f"Deleted cache for {file[:-8]}")
+				logger.info(f"Deleted cache for {file.split('.')[0]}")
+				print(f"Deleted api cache for {file.split('.')[0]} (expired)")
 	if commons.args.cc == any(["api", "content"]) and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
 		print("Are you sure you want to clear all api cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing all api cache? [Y/n]: ")
@@ -172,6 +186,8 @@ def main():
 		query_mod(commons.args.query)
 	elif commons.args.toggle:
 		toggle_mod(commons.args.toggle)
+	elif commons.args.search:
+		search_mod(commons.args.search)
 	elif commons.args.instance:
 		if commons.args.instance == "add":
 			commons.add_instance()
