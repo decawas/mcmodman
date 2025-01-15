@@ -1,7 +1,7 @@
-# pylint: disable=C0114 C0116 C0411 C0410 E0606 W1203
+# pylint: disable=C0114 C0116 C0410 E0606 W1203
 # pylint: disable=W0621
-import os, appdirs, toml, re, logging  # type: ignore
 from argparse import ArgumentParser
+import logging, re, os, appdirs, toml
 
 __version__ = "25.3"
 
@@ -17,47 +17,37 @@ def instance_firstrun():
 	if os.path.exists(f"{instance_dir}/config/quilt-loader.txt"): # detect quilt
 		loaders.append("quilt")
 		match = re.search(r'Minecraft (\d+(?:\.\d+)*) with', log)
-		logger.info("found loader 'Quilt'")
 	if os.path.exists(f"{instance_dir}/config/neoforge-client.toml") or os.path.exists(f"{instance_dir}/config/neoforge-server.toml"): # detect neoforge
 		loaders.append("neoforge")
 		match = re.search(r'--version, (\d+(?:\.\d+)*),', log)
-		logger.info("found loader 'NeoForge'")
 	if os.path.exists(f"{instance_dir}/.fabric"): # detect fabric
 		loaders.append("fabric")
 		match = re.search(r'Minecraft (\d+(?:\.\d+)*) with', log)
-		logger.info("found loader 'Fabric'")
 	if os.path.exists(f"{instance_dir}/config/forge-client.toml") or os.path.exists(f"{instance_dir}/config/forge-server.toml"): # detect forge
 		loaders.append("forge")
 		match = re.search(r'--version, (\d+(?:\.\d+)*),', log)
-		logger.info("found loader 'Forge'")
 	if os.path.exists(f"{instance_dir}/config/liteconfig"): # detect liteloader
 		loaders.append("liteloader")
 		match = re.search(r'LiteLoader (\d+(?:\.\d+)*)\n', log)
-		logger.info("found loader 'LiteLoader'")
 	if re.search(r'Purpur (\d+(?:\.\d+)*)-', log) is not None: # detect folia
 		loaders.append("purpur")
 		match = re.search(r'Purpur (\d+(?:\.\d+)*)-', log)
-		logger.info("found loader 'Purpur'")
 	if re.search(r'Folia version (\d+(?:\.\d+)*)-', log) is not None: # detect folia
 		loaders.append("folia")
 		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-		logger.info("found loader 'Folia'")
 	if os.path.exists(f"{instance_dir}/config/paper-global.yml") and loaders[0] != any(["folia", "purpur"]): # detect paper
 		loaders.append("paper")
 		match = re.search(r'Paper (\d+(?:\.\d+)*)-', log)
-		logger.info("found loader 'Paper'")
 	if os.path.exists(f"{instance_dir}/spigot.yml") and loaders[0] != any(["folia", "purpur", "paper"]): # detect spigot
 		loaders.append("spigot")
 		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-		logger.info("found loader 'Spigot'")
 	if os.path.exists(f"{instance_dir}/bukkit.yml") and loaders[0] != any(["folia", "purpur", "paper", "spigot"]): # detect bukkit
 		loaders.append("bukkit")
 		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-		logger.info("found loader 'CraftBukkit'")
 	if os.path.exists(f"{instance_dir}/config/sponge/sponge.conf"): # detect sponge
 		loaders.append("sponge")
 		match = re.search(r'spongevanilla-(\d+(?:\.\d+)*)-', log)
-		logger.info("found loader 'Sponge'")
+	logger.info("Found loaders %s", ", ".join(loaders))
 	#TODO: deal with the monstrosity that is loader detection
 
 	if len(loaders) > 1:
@@ -148,8 +138,9 @@ parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]', dest="remov
 parser.add_argument('-Q', nargs='*', type=str, help='-Q [mod_slug]', dest="query")
 parser.add_argument('-T', nargs='+', type=str, help='-T [mod_slug]', dest="toggle")
 parser.add_argument('-F', nargs='+', type=str, help='-F [search query]', dest="search")
-parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove')
+parser.add_argument('-D', nargs='+', type=str, help='-D [mod_slug]', dest="downgrade")
 parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all')
+parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove')
 parser.add_argument('--version', action="store_true", help='-version')
 args=parser.parse_args()
 
@@ -157,10 +148,10 @@ config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
 logger = logging.getLogger(__name__) #TODO: resolve W1203
 logging.basicConfig(filename=f"{config_dir}/mcmodman.log", level=logging.NOTSET)
-logger.info(f"Starting mcmodman version {__version__}")
-logger.info(f"Arguments: {args}")
+logger.info("Starting mcmodman version %s", __version__)
+logger.info("Arguments: %s", args)
 
-logger.info(f"Config directory: {config_dir}")
+logger.info("Config directory: %s", config_dir)
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
@@ -177,11 +168,11 @@ if not os.path.exists(f"{config_dir}/instances.toml"):
 		toml.dump(instances, f)
 else:
 	instances = toml.load(f"{config_dir}/instances.toml")
-	logger.info(f"instances {instances}")
+	logger.info("instances %s", instances)
 
 if not args.instance:
 	cache_dir = appdirs.user_cache_dir("ekno/mcmodman")
-	logger.info(f"Cache directory: {cache_dir}")
+	logger.info("Cache directory: %s", cache_dir)
 	if not os.path.exists(cache_dir):
 		os.makedirs(cache_dir)
 		os.makedirs(f"{cache_dir}/mods")
@@ -201,4 +192,4 @@ if not args.instance:
 	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 
-	logger.info(f"instance {instancecfg}")
+	logger.info("instance %s", instancecfg)
