@@ -1,6 +1,6 @@
-# pylint: disable=C0114 C0116 C0410 E0606 W1203
+# pylint: disable=C0114 C0116 C0410 E0606 E0401
 # pylint: disable=W0621
-from argparse import ArgumentParser
+from argparse import ArgumentParser, SUPPRESS
 import logging, re, os, appdirs, toml
 
 __version__ = "25.3"
@@ -14,54 +14,35 @@ def instance_firstrun():
 		raise SystemExit
 
 	loaders = []
-	if os.path.exists(f"{instance_dir}/config/quilt-loader.txt"): # detect quilt
-		loaders.append("quilt")
-		match = re.search(r'Minecraft (\d+(?:\.\d+)*) with', log)
-	if os.path.exists(f"{instance_dir}/config/neoforge-client.toml") or os.path.exists(f"{instance_dir}/config/neoforge-server.toml"): # detect neoforge
-		loaders.append("neoforge")
-		match = re.search(r'--version, (\d+(?:\.\d+)*),', log)
-	if os.path.exists(f"{instance_dir}/.fabric"): # detect fabric
-		loaders.append("fabric")
-		match = re.search(r'Minecraft (\d+(?:\.\d+)*) with', log)
-	if os.path.exists(f"{instance_dir}/config/forge-client.toml") or os.path.exists(f"{instance_dir}/config/forge-server.toml"): # detect forge
-		loaders.append("forge")
-		match = re.search(r'--version, (\d+(?:\.\d+)*),', log)
-	if os.path.exists(f"{instance_dir}/config/liteconfig"): # detect liteloader
-		loaders.append("liteloader")
-		match = re.search(r'LiteLoader (\d+(?:\.\d+)*)\n', log)
-	if re.search(r'Purpur (\d+(?:\.\d+)*)-', log) is not None: # detect folia
-		loaders.append("purpur")
-		match = re.search(r'Purpur (\d+(?:\.\d+)*)-', log)
-	if re.search(r'Folia version (\d+(?:\.\d+)*)-', log) is not None: # detect folia
-		loaders.append("folia")
-		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-	if os.path.exists(f"{instance_dir}/config/paper-global.yml") and loaders[0] != any(["folia", "purpur"]): # detect paper
-		loaders.append("paper")
-		match = re.search(r'Paper (\d+(?:\.\d+)*)-', log)
-	if os.path.exists(f"{instance_dir}/spigot.yml") and loaders[0] != any(["folia", "purpur", "paper"]): # detect spigot
-		loaders.append("spigot")
-		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-	if os.path.exists(f"{instance_dir}/bukkit.yml") and loaders[0] != any(["folia", "purpur", "paper", "spigot"]): # detect bukkit
-		loaders.append("bukkit")
-		match = re.search(r'server version (\d+(?:\.\d+)*)\n', log)
-	if os.path.exists(f"{instance_dir}/config/sponge/sponge.conf"): # detect sponge
-		loaders.append("sponge")
-		match = re.search(r'spongevanilla-(\d+(?:\.\d+)*)-', log)
+	loader_detector = {"quilt": {"detect": lambda: os.path.exists(f"{instance_dir}/config/quilt-loader.txt"), "version_detect": r"Minecraft (\d+(?:\.\d+)*) with"},
+    "neoforge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/neoforge-client.toml") or os.path.exists(f"{instance_dir}/config/neoforge-server.toml"), "version_detect": r"--version, (\d+(?:\.\d+)*),"},
+    "fabric": {"detect": lambda: os.path.exists(f"{instance_dir}/.fabric"), "version_detect": r"Minecraft (\d+(?:\.\d+)*) with"},
+    "forge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/forge-client.toml") or os.path.exists(f"{instance_dir}/config/forge-server.toml"), "version_detect": r"--version, (\d+(?:\.\d+)*),"},
+    "liteloader": {"detect": lambda: os.path.exists(f"{instance_dir}/config/liteconfig"), "version_detect": r"LiteLoader (\d+(?:\.\d+)*)\n"},
+    "purpur": {"detect": lambda: re.search(r"Purpur (\d+(?:\.\d+)*)-", log) is not None, "version_detect": r"Purpur (\d+(?:\.\d+)*)-"},
+    "folia": {"detect": lambda: re.search(r"Folia version (\d+(?:\.\d+)*)-", log) is not None, "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
+    "paper": {"detect": lambda: os.path.exists(f"{instance_dir}/config/paper-global.yml"), "version_detect": r"Paper (\d+(?:\.\d+)*)-"},
+    "spigot": {"detect": lambda: os.path.exists(f"{instance_dir}/spigot.yml"), "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
+    "bukkit": {"detect": lambda: os.path.exists(f"{instance_dir}/bukkit.yml"), "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
+    "sponge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/sponge/sponge.conf"), "version_detect": r"spongevanilla-(\d+(?:\.\d+)*)-"}}
+
 	logger.info("Found loaders %s", ", ".join(loaders))
-	#TODO: deal with the monstrosity that is loader detection
+	for loader, det in loader_detector.items():
+		if det["detect"]():
+			loaders.append(loader)
+			match = re.search(det["version_detect"], log)
+			break
 
 	if len(loaders) > 1:
-		print("mcmodman does not support instances with multiple loaders")
-		raise RuntimeError("mcmodman does not support instances with multiple loaders")
+		if loaders[0] not in ["folia", "purper", "paper", "spigot"]:
+			print("mcmodman does not support instances with multiple loaders")
+			raise RuntimeError("mcmodman does not support instances with multiple loaders")
 	if not loaders:
 		print("Could not find any mod loaders for this instance\nif you are using Rift, RML or have no mod loader you will have to manually set that")
 		raise RuntimeError("mcmodman could not find any loaders for this instance")
 	managefile = {"loader": loaders[0]}
 
-	if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None:
-		managefile["modfolder"] = "plugins"
-	if re.search(loaders[0], "quilt,neoforge,sponge,fabric,forge,liteloader") is not None:
-		managefile["modfolder"] = "mods"
+	managefile["modfolder"] = "plugins" if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None else "mods"
 
 	if match:
 		managefile["version"] = f"{match.group(1)}"
@@ -132,21 +113,21 @@ def del_instance():
 
 
 parser = ArgumentParser(description='mcmodman')
-parser.add_argument('-S', nargs='+', type=str, help='-S [mod_slug]', dest="addbyslug")
-parser.add_argument('-U', nargs='+', type=str, help='-U [mod_slug]', dest="update")
-parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]', dest="remove")
-parser.add_argument('-Q', nargs='*', type=str, help='-Q [mod_slug]', dest="query")
-parser.add_argument('-T', nargs='+', type=str, help='-T [mod_slug]', dest="toggle")
-parser.add_argument('-F', nargs='+', type=str, help='-F [search query]', dest="search")
-parser.add_argument('-D', nargs='+', type=str, help='-D [mod_slug]', dest="downgrade")
-parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all')
-parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove')
-parser.add_argument('--version', action="store_true", help='-version')
+parser.add_argument('-S', nargs='+', type=str, help='-S [mod_slug]', dest="addbyslug", default=SUPPRESS)
+parser.add_argument('-U', nargs='+', type=str, help='-U [mod_slug]', dest="update", default=SUPPRESS)
+parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]', dest="remove", default=SUPPRESS)
+parser.add_argument('-Q', nargs='*', type=str, help='-Q [mod_slug]', dest="query", default=SUPPRESS)
+parser.add_argument('-T', nargs='+', type=str, help='-T [mod_slug]', dest="toggle", default=SUPPRESS)
+parser.add_argument('-F', nargs='+', type=str, help='-F [search query]', dest="search", default=SUPPRESS)
+parser.add_argument('-D', nargs='+', type=str, help='-D [mod_slug]', dest="downgrade", default=SUPPRESS)
+parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all', default=SUPPRESS)
+parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove', default=SUPPRESS)
+parser.add_argument('--version', action="store_true", help='-version', default=SUPPRESS)
 args=parser.parse_args()
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
-logger = logging.getLogger(__name__) #TODO: resolve W1203
+logger = logging.getLogger(__name__)
 logging.basicConfig(filename=f"{config_dir}/mcmodman.log", level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
 logger.info("Arguments: %s", args)
@@ -170,7 +151,7 @@ else:
 	instances = toml.load(f"{config_dir}/instances.toml")
 	logger.info("instances %s", instances)
 
-if not args.instance:
+if "instance" not in args:
 	cache_dir = appdirs.user_cache_dir("ekno/mcmodman")
 	logger.info("Cache directory: %s", cache_dir)
 	if not os.path.exists(cache_dir):

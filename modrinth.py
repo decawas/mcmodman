@@ -1,9 +1,9 @@
-# pylint: disable=C0114 C0116 C0411 C0410 E0606 W1203
-import os, toml, commons, logging
+# pylint: disable=C0114 C0116 C0410 C0411 E0606
 from hashlib import sha512
 from time import time
-from requests import get
 from shutil import copyfile
+import logging, os, toml, commons
+from requests import get
 
 def get_mod(slug, mod_data, index):
 	if os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
@@ -14,9 +14,9 @@ def get_mod(slug, mod_data, index):
 		print(f"Downloading mod '{slug}'")
 		url = f"{mod_data['files'][0]['url']}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		logger.info(f'Modrinth returned headers {response.headers}')
+		logger.info('Modrinth returned headers %s', response.headers)
 		if response.status_code != 200:
-			logger.error(f'Modrinth download returned {response.status_code}')
+			logger.error('Modrinth download returned %s', response.status_code)
 			return None
 		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["files"][0]["filename"]), "wb") as f:
 			f.write(response.content)
@@ -55,20 +55,18 @@ def parse_api(api_data):
 			logger.error("mcmodman does not currently support datapacks, skipping")
 			return "Unsupported project type"
 	else:
-		logger.error(f"mcmodman does not currently support projects of type '{api_data['project_type']}', skipping")
+		logger.error("mcmodman does not currently support projects of type '%s', skipping", api_data['project_type'])
 		return "Unsupported project type"
 
-	if commons.config["include-beta"]:
-		allowed_version_types = ["release", "beta", "alpha"]
-	else:
-		allowed_version_types = ["release"]
+	allowed_version_types = ["release", "beta", "alpha"] if commons.config["include-beta"] else ["release"]
+
 	matches = []
 	for version in api_data["versions"]:
 		if version["version_type"] in allowed_version_types and commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
 			matches.append(version)
 	if not matches:
 		print(f"No matching versions found for mod '{api_data['slug']}'")
-		logger.error(f"No matching versions found for mod '{api_data['slug']}")
+		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
 	return matches
 
@@ -79,12 +77,12 @@ def get_api(slug):
 		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["api-cache-version"] == 2:
 			print(f"Using cached api data for mod '{slug}'")
 			mod_data = cache_data["mod-api"]
-			logger.info(f"Found cached api data for mod '{slug}' at {commons.cache_dir}/modrinth-api/{slug}.mmcache.toml")
+			logger.info("Found cached api data for mod %s at %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		else:
 			del cache_data
 
 	if "cache_data" not in locals():
-		logger.info(f"Could not find valid cache data for mod '{slug}' fetching api data for mod '{slug}' from modrinth")
+		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
 		print(f"Fetching api data for mod '{slug}'")
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
@@ -98,7 +96,7 @@ def get_api(slug):
 		mod_data["versions"] = response.json()
 
 		cache_data = {"time": time(), "api-cache-version": 2, "mod-api": mod_data}
-		logger.info(f"Caching api data for mod '{slug}' to {commons.cache_dir}/modrinth-api/{slug}.mmcache.toml")
+		logger.info("Caching api data for mod %s to %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"), 'w',  encoding='utf-8') as file:
 			print(f"Caching api data for mod '{slug}'")
 			toml.dump(cache_data, file)
@@ -111,12 +109,12 @@ def search_api(query):
 		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["query-cache-version"] == 0:
 			print(f"Using cached query data for mod query '{query}'")
 			query_data = cache_data["query-api"]
-			logger.info(f"Found cached query data for mod query '{query}' at {commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
+			logger.info("Found cached query data for mod query '%s' at %s", query, f"{commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
 		else:
 			del cache_data
 
 	if "cache_data" not in locals():
-		logger.info(f"Could not find valid cache data for query '{query}'")
+		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying modrinth with query '{query}'")
 		url = f"https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}&facets=[[\"project_types!=modpack\"],[\"versions:{commons.minecraft_version}\"],[\"categories:{commons.mod_loader}\"]]"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
@@ -124,7 +122,7 @@ def search_api(query):
 		query_data = response.json()
 
 		cache_data = {"time": time(), "query-cache-version": 0, "query-api": query_data}
-		logger.info(f"Caching data for query '{query}' to {commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
+		logger.info("Caching data for query '%s' to %s", query, f"{commons.cache_dir}/modrinth-api/{query}.modrinthquery.toml")
 		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{query}.modrinthquery.toml"), 'w',  encoding='utf-8') as file:
 			print(f"Caching data for query '{query}'")
 			toml.dump(cache_data, file)
