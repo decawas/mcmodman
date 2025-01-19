@@ -34,6 +34,18 @@
    ```
    Enables or disables specific mods.
 
+6. **Toggle Mod Status**:
+   ```
+   mcmodman -F search query
+   ```
+   Searches on modrinth.
+
+7. **Toggle Mod Status**:
+   ```
+   mcmodman -D mod1 mod2 mod3 ...
+   ```
+   Allows downloading a specific version of a mod.
+
 6. **Clear Cache**:
    ```
    mcmodman -cc api|content

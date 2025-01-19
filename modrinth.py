@@ -6,57 +6,71 @@ import logging, os, toml, commons
 from requests import get
 
 def get_mod(slug, mod_data, index):
-	if os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
+	if os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml")):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']))
-		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
+		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 	else:
 		print(f"Downloading mod '{slug}'")
-		url = f"{mod_data['files'][0]['url']}"
+		url = f"{mod_data['versions'][0]['files'][0]['url']}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		logger.info('Modrinth returned headers %s', response.headers)
 		if response.status_code != 200:
 			logger.error('Modrinth download returned %s', response.status_code)
-			return None
-		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["files"][0]["filename"]), "wb") as f:
-			f.write(response.content)
+			return
 
-	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
+	_, folder = project_get_type(mod_data)
+
+	if folder == "":
+		with open("server.properties", "r", encoding="utf-8") as f:
+			properties = toml.loads(f.read())
+		folder = os.path.join(properties["level-name"], "datapacks")
+
+	with open(os.path.join(commons.instance_dir, folder, mod_data['versions'][0]["files"][0]["filename"]), "wb") as f:
+		f.write(response.content)
+
+	if commons.config["checksum"] in ["Always", "Download"] and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['versions'][0]['files'][0]['filename']}.mmcache.toml")):
 		perfcheck = True
-	elif commons.config["checksum"] == "Always" and os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
+	elif commons.config["checksum"] == "Always":
 		perfcheck = True
-	elif commons.config["checksum"] == "Never" and not os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['files'][0]['filename']}.mm.toml")):
+	elif commons.config["checksum"] == "Never":
 		perfcheck = False
 	else:
 		perfcheck = True
 
 	if perfcheck:
 		print("Checking hash")
-		with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']), 'rb') as f:
+		with open(os.path.join(commons.instance_dir, folder, mod_data["versions"][0]['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()
-		if mod_data["files"][0]["hashes"]["sha512"] != checksum:
+		if mod_data["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
 			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']))
-		return "Bad checksum"
+		return
 	if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']})):
 		print("Removing old version")
 		os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']}))
 
 def parse_api(api_data):
-	if api_data["project_type"] == "modpack":
+	ptype, _ = project_get_type(api_data)
+	if ptype == "modpack":
 		print(f"{api_data['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
 
-	if api_data["project_type"] == "mod":
-		if commons.instancecfg["loader"] in api_data["loaders"]:
-			mod_loader = commons.instancecfg["loader"]
-		elif "datapack" in api_data["loaders"]:
-			logger.error("mcmodman does not currently support datapacks, skipping")
-			return "Unsupported project type"
-	else:
-		logger.error("mcmodman does not currently support projects of type '%s', skipping", api_data['project_type'])
-		return "Unsupported project type"
+	if ptype == "mod":
+		mod_loader = commons.instancecfg["loader"]
+	elif ptype in ["shader", "resourcepack"]:
+		if os.path.exists(os.path.join(commons.instance_dir, "server.properties")):
+			print(f"{ptype}s do not work on servers, skipping")
+			logger.warning("content of type '%s' can not be used on servers", ptype)
+			return ptype
+		mod_loader = api_data["loaders"][0]
+	elif ptype == "datapack":
+		if not os.path.exists("server.properties"):
+			print("mcmodman does not currently support datapacks for clients, skipping")
+			logger.warning("content of type '%s' can not be used on clients", ptype)
+			return ptype
+		mod_loader = "datapack"
 
 	allowed_version_types = ["release", "beta", "alpha"] if commons.config["include-beta"] else ["release"]
 
@@ -128,5 +142,26 @@ def search_api(query):
 			toml.dump(cache_data, file)
 
 	return query_data
+
+def project_get_type(api_data):
+	if api_data["project_type"] == "modpack":
+		ptype = "modpack"
+		folder = ""
+	elif api_data["project_type"] in ["shader", "resourcepack"]:
+		ptype = api_data["project_type"]
+		folder = os.path.join(commons.instance_dir, "shaderpacks" if api_data["project_type"] == "shader" else "resourcepacks")
+	elif api_data["project_type"] == "mod":
+		if commons.instancecfg["loader"] in api_data["loaders"]:
+			ptype = "mod"
+			folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
+		elif "datapack" in api_data["loaders"]:
+			ptype = "datapack"
+			folder = os.path.join("world" if os.path.exists("server.properties") else "", "datapacks")
+		else:
+			raise ValueError
+	else:
+		raise ValueError
+
+	return ptype, folder
 
 logger = logging.getLogger(__name__)
