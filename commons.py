@@ -1,5 +1,4 @@
-# pylint: disable=C0114 C0116 C0410 E0606 E0401
-# pylint: disable=W0621
+# pylint: disable=C0114 C0116 C0410 E0606 W0621
 from argparse import ArgumentParser, SUPPRESS
 import logging, re, os, appdirs, toml
 
@@ -78,7 +77,7 @@ def add_instance():
 	path = input(":: Enter instance path: ")
 	if name in instances.keys():
 		print(f"Instance '{name}' already exists")
-		return "instance"
+		return
 
 	instances[name] = {"name": name, "path": path}
 	with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
@@ -92,34 +91,32 @@ def sel_instance():
 		with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
 			toml.dump(config, f)
 		print(f"Selected instance '{name}'")
-		return "instance"
+		return
 	print(f"Instance '{name}' not found")
-	return "no instance"
 
 def del_instance():
 	name = input(":: Enter instance name: ")
 	if name == config["selected-instance"]:
 		print("cant delete selected instance")
-		return "instance"
+		return
 	for i, instance in enumerate(config["instances"]):
 		if instance["name"] == name:
 			del config["instances"][i]
 			with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
 				toml.dump(instances, f)
 			print(f"Deleted instance '{name}'")
-			return "instance"
+			return
 	print(f"Instance '{name}' not found")
-	return "no instance"
 
 
 parser = ArgumentParser(description='mcmodman')
-parser.add_argument('-S', nargs='+', type=str, help='-S [mod_slug]', dest="addbyslug", default=SUPPRESS)
-parser.add_argument('-U', nargs='+', type=str, help='-U [mod_slug]', dest="update", default=SUPPRESS)
-parser.add_argument('-R', nargs='+', type=str, help='-R [mod_slug]', dest="remove", default=SUPPRESS)
-parser.add_argument('-Q', nargs='*', type=str, help='-Q [mod_slug]', dest="query", default=SUPPRESS)
-parser.add_argument('-T', nargs='+', type=str, help='-T [mod_slug]', dest="toggle", default=SUPPRESS)
-parser.add_argument('-F', nargs='+', type=str, help='-F [search query]', dest="search", default=SUPPRESS)
-parser.add_argument('-D', nargs='+', type=str, help='-D [mod_slug]', dest="downgrade", default=SUPPRESS)
+parser.add_argument('-S', nargs='+', type=str, help='-S [mods to download]', dest="addbyslug", default=SUPPRESS)
+parser.add_argument('-U', nargs='+', type=str, help='-U [mods to update]', dest="update", default=SUPPRESS)
+parser.add_argument('-R', nargs='+', type=str, help='-R [mods to remove]', dest="remove", default=SUPPRESS)
+parser.add_argument('-Q', nargs='*', type=str, help='-Q [mods to query]', dest="query", default=SUPPRESS)
+parser.add_argument('-T', nargs='+', type=str, help='-T [mods to toggle]', dest="toggle", default=SUPPRESS)
+parser.add_argument('-F', nargs='+', type=str, help='-F [mods to search for]', dest="search", default=SUPPRESS)
+parser.add_argument('-D', nargs='+', type=str, help='-D [mods to downgrade]', dest="downgrade", default=SUPPRESS)
 parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all', default=SUPPRESS)
 parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove', default=SUPPRESS)
 parser.add_argument('--version', action="store_true", help='-version', default=SUPPRESS)
