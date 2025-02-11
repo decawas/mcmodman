@@ -24,15 +24,19 @@ def add_mod(slugs):
 		if isinstance(mod["api_data"], dict):
 			logger.info("Successfully got api data for mod '%s'", mod['slug'])
 			mod["api_data"]["versions"] = modrinth.parse_api(mod["api_data"])
-			print(mod["api_data"]["versions"][0]["id"], mod["index"]["version-id"])
 			if isinstance(mod["api_data"]["versions"], str) or mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
+				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
+
+	for mod in mods:
+		for dependency in mod["api_data"]["versions"][0]["dependencies"]:
+			dep_api_data = modrinth.get_api(dependency["project_id"])
+			print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({'optional' if dependency['dependency_type'] == 'optional' else 'required'})")
 
 	if not mods:
 		print("all mods up to date")
 		return
 
-	print(mod["api_data"]["versions"][0]["id"], mod["index"]["version-id"])
 	confirm(mods, "download")
 	for mod in mods:
 		_, folder = modrinth.project_get_type(mod["api_data"])
@@ -108,7 +112,7 @@ def query_mod(slugs):
 
 def toggle_mod(slugs):
 	for slug in slugs:
-		index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slugs}.mm.toml"))
+		index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 		if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index["filename"])):
 			os.rename(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled"))
 			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled")

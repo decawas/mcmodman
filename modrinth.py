@@ -6,10 +6,11 @@ import logging, os, toml, commons
 from requests import get
 
 def get_mod(slug, mod_data, index):
-	if os.path.exists(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml")):
+	if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml")):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
-		copyfile(os.path.join(commons.cache_dir, commons.instancecfg["modfolder"], f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+		copyfile(os.path.join(commons.cache_dir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
+		copyfile(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+		return
 	else:
 		print(f"Downloading mod '{slug}'")
 		url = f"{mod_data['versions'][0]['files'][0]['url']}"
@@ -72,16 +73,15 @@ def parse_api(api_data):
 			return ptype
 		mod_loader = "datapack"
 
-	allowed_version_types = ["release", "beta", "alpha"] if commons.config["include-beta"] else ["release"]
-
-	matches = []
+	matches = {"release": [], "beta": [], "alpha": []}
 	for version in api_data["versions"]:
-		if version["version_type"] in allowed_version_types and commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
-			matches.append(version)
+		if commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
+			matches[version["version_type"]].append(version)
 	if not matches:
 		print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
+	matches = matches["release"].append(matches["beta"]).append(matches["alpha"])
 	return matches
 
 
@@ -112,8 +112,12 @@ def get_api(slug):
 		cache_data = {"time": time(), "api-cache-version": 2, "mod-api": mod_data}
 		logger.info("Caching api data for mod %s to %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"), 'w',  encoding='utf-8') as file:
-			print(f"Caching api data for mod '{slug}'")
+			print(f"Caching api data for mod '{mod_data['slug']}'")
 			toml.dump(cache_data, file)
+		if slug != mod_data['slug']:
+			with open(os.path.join(commons.cache_dir, "modrinth-api", f"{mod_data['slug']}.mmcache.toml"), 'w',  encoding='utf-8') as file:
+				toml.dump(cache_data, file)
+
 
 	return mod_data
 
