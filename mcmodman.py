@@ -28,10 +28,13 @@ def add_mod(slugs):
 				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
 
+	checkeddependencies = []
 	for mod in mods:
 		for dependency in mod["api_data"]["versions"][0]["dependencies"]:
-			dep_api_data = modrinth.get_api(dependency["project_id"])
-			print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({'optional' if dependency['dependency_type'] == 'optional' else 'required'})")
+			if dependency["project_id"] not in checkeddependencies:
+				dep_api_data = modrinth.get_api(dependency["project_id"], depcheck=True)
+				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({'optional' if dependency['dependency_type'] == 'optional' else 'required'})")
+				checkeddependencies.append(dependency["project_id"])
 
 	if not mods:
 		print("all mods up to date")
@@ -46,7 +49,7 @@ def add_mod(slugs):
 		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")):
 			print(f"Caching mod '{mod['slug']}'")
 			copyfile(os.path.join(commons.instance_dir, folder, mod['api_data']['versions'][0]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", mod['api_data']['versions'][0]['files'][0]['filename']))
-			copyfile(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml"), os.path.join(commons.cache_dir, folder, f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml"))
+			copyfile(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml"), os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml"))
 			logger.info("Copied content '%s' to cache", {mod['slug']})
 		print(f"Mod '{mod['slug']}' successfully updated")
 
@@ -109,6 +112,7 @@ def query_mod(slugs):
 				logger.info("Couldnt find index for mod %s", {slug})
 	elif isinstance(slugs, str):
 		return os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slugs}.mm.toml"))
+	return None
 
 def toggle_mod(slugs):
 	for slug in slugs:

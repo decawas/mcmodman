@@ -7,10 +7,6 @@ def mcmm(slug, mod_data):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
 	_, folder = project_get_type(mod_data)
-	if folder == "":
-		with open("server.properties", "r", encoding="utf-8") as f:
-			properties = toml.loads(f.read())
-		folder = os.path.join(properties["level-name"], "datapacks")
 	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["id"], 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["project_type"], "folder": folder, 'hash': mod_data['versions'][0]['files'][0]['hashes']['sha512'], 'hash-format': 'sha512', 'mode': 'url', 'url': mod_data['versions'][0]["files"][0]["url"], 'source': 'modrinth', 'game-version': commons.minecraft_version, 'reason': "explicit"}
 	if commons.instancecfg["loader"] in mod_data["loaders"]:
 		pass

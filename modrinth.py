@@ -1,9 +1,10 @@
-# pylint: disable=C0114 C0116 C0410 C0411 E0606
+# pylint: disable=C0114 C0116 C0410 W0106
 from hashlib import sha512
 from time import time
 from shutil import copyfile
-import logging, os, toml, commons
+import logging, os
 from requests import get
+import toml, commons
 
 def get_mod(slug, mod_data, index):
 	if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml")):
@@ -11,14 +12,14 @@ def get_mod(slug, mod_data, index):
 		copyfile(os.path.join(commons.cache_dir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
 		copyfile(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 		return
-	else:
-		print(f"Downloading mod '{slug}'")
-		url = f"{mod_data['versions'][0]['files'][0]['url']}"
-		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		logger.info('Modrinth returned headers %s', response.headers)
-		if response.status_code != 200:
-			logger.error('Modrinth download returned %s', response.status_code)
-			return
+
+	print(f"Downloading mod '{slug}'")
+	url = f"{mod_data['versions'][0]['files'][0]['url']}"
+	response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+	logger.info('Modrinth returned headers %s', response.headers)
+	if response.status_code != 200:
+		logger.error('Modrinth download returned %s', response.status_code)
+		return
 
 	_, folder = project_get_type(mod_data)
 
@@ -58,20 +59,17 @@ def parse_api(api_data):
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
 
-	if ptype == "mod":
-		mod_loader = commons.instancecfg["loader"]
-	elif ptype in ["shader", "resourcepack"]:
+	mod_loader = commons.instancecfg["loader"] if ptype == "mod" else api_data["loaders"][0] if ptype in ["shader", "resourcepack"] else "datapack" if ptype == "datapack" else ""
+	if ptype in ["shader", "resourcepack"]:
 		if os.path.exists(os.path.join(commons.instance_dir, "server.properties")):
 			print(f"{ptype}s do not work on servers, skipping")
 			logger.warning("content of type '%s' can not be used on servers", ptype)
 			return ptype
-		mod_loader = api_data["loaders"][0]
 	elif ptype == "datapack":
-		if not os.path.exists("server.properties"):
-			print("mcmodman does not currently support datapacks for clients, skipping")
-			logger.warning("content of type '%s' can not be used on clients", ptype)
+		if not os.path.exists("level.dat"):
+			print("mcmodman only supports datapacks for worlds, skipping")
+			logger.warning("content of type '%s' can only be used on worlds", ptype)
 			return ptype
-		mod_loader = "datapack"
 
 	matches = {"release": [], "beta": [], "alpha": []}
 	for version in api_data["versions"]:
@@ -81,15 +79,15 @@ def parse_api(api_data):
 		print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
-	matches = matches["release"].append(matches["beta"]).append(matches["alpha"])
+	matches = matches["release"] + matches["beta"] + (matches["alpha"])
 	return matches
 
 
-def get_api(slug):
+def get_api(slug, depcheck=False):
 	if os.path.exists(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml")):
 		cache_data = toml.load(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"))
 		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["api-cache-version"] == 2:
-			print(f"Using cached api data for mod '{slug}'")
+			print(f"Using cached api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
 			mod_data = cache_data["mod-api"]
 			logger.info("Found cached api data for mod %s at %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		else:
@@ -97,7 +95,7 @@ def get_api(slug):
 
 	if "cache_data" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
-		print(f"Fetching api data for mod '{slug}'")
+		print(f"Fetching api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		if response.status_code != 200:
@@ -112,12 +110,11 @@ def get_api(slug):
 		cache_data = {"time": time(), "api-cache-version": 2, "mod-api": mod_data}
 		logger.info("Caching api data for mod %s to %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"), 'w',  encoding='utf-8') as file:
-			print(f"Caching api data for mod '{mod_data['slug']}'")
+			print(f"Caching api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
 			toml.dump(cache_data, file)
 		if slug != mod_data['slug']:
 			with open(os.path.join(commons.cache_dir, "modrinth-api", f"{mod_data['slug']}.mmcache.toml"), 'w',  encoding='utf-8') as file:
 				toml.dump(cache_data, file)
-
 
 	return mod_data
 
@@ -160,7 +157,7 @@ def project_get_type(api_data):
 			folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
 		elif "datapack" in api_data["loaders"]:
 			ptype = "datapack"
-			folder = os.path.join("world" if os.path.exists("server.properties") else "", "datapacks")
+			folder = os.path.join(commons.instance_dir, "datapacks")
 		else:
 			raise ValueError
 	else:
