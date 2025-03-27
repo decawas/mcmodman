@@ -67,7 +67,7 @@ def parse_api(api_data):
 		print(f"{ptype}s do not work on servers, skipping")
 		logger.warning("content of type '%s' can not be used on servers", ptype)
 		return ptype
-	elif ptype == "datapack" and not commons.instancecfg["type"] == "world":
+	if ptype == "datapack" and not commons.instancecfg["type"] == "world":
 		print("mcmodman only supports datapacks for worlds, skipping")
 		logger.warning("content of type '%s' can only be used on worlds", ptype)
 		return ptype

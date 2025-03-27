@@ -34,13 +34,13 @@
    ```
    Enables or disables specific mods.
 
-6. **Toggle Mod Status**:
+6. **Search Mod**:
    ```
    mcmodman -F search query
    ```
    Searches on modrinth.
 
-7. **Toggle Mod Status**:
+7. **Downgrade Mod**:
    ```
    mcmodman -D mod1 mod2 mod3 ...
    ```

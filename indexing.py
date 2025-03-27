@@ -1,6 +1,11 @@
-# pylint: disable=C0114 C0116 C0410
-import os, toml, commons
+# pylint: disable=C0116 C0410
+"""
+handles indexing for content
+"""
+import logging, os, toml, commons
 from modrinth import project_get_type
+
+logger = logging.getLogger(__name__)
 
 def mcmm(slug, mod_data):
 	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
@@ -33,3 +38,14 @@ def packwiz(slug, mod_data):
 	index = toml.dumps(index)[:-1]
 	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index" f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
 		file.write(index)
+
+def get(slug):
+	if commons.args[0] in ["-S", "-D"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+		index = {"slug": {slug},"filename": "-", "version": "None", "version-id": "None"}
+		logger.info("Created dummy index for mod new '%s'", slug)
+		return index
+	if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+		index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+		logger.info("Loaded index for mod '%s'", slug)
+		return index
+	return None

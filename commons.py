@@ -1,9 +1,9 @@
-# pylint: disable=C0116 C0410 E0606 W0621
+# pylint: disable=C0116 C0410 W0621
 """
 defines common variables, and meta-instance functions
 """
-from argparse import ArgumentParser, SUPPRESS
-import logging, re, os, json, appdirs, toml, sys
+from sys import argv
+import logging, re, os, json, appdirs, toml
 
 __version__ = "25.3+"
 
@@ -82,67 +82,58 @@ def instance_firstrun():
 
 def compdetect():
 	if os.path.exists(f"{instance_dir}/../instance.cfg"):
-		if os.path.exists(f"{instance_dir}/../../../prismlauncher.cfg"):
-			print("mcmodman has detected that this instance is managed by prism launcher\nwould you like to enable dual indexing for prism launcher compatibility?")
-			logger.info("found instance.cfg and prismlauncher.cfg, instance is likely managed by Prism Launcher")
-		if os.path.exists(f"{instance_dir}/../../../polymc.cfg"):
-			print("mcmodman has detected that this instance is managed by poly mc\nwould you like to enable dual indexing for poly mc compatibility?")
-			logger.info("found instance.cfg and ploymc.cfg, instance is likely managed by PolyMC")
+		p = "Prism Launcher" if os.path.exists(f"{instance_dir}/../../../prismlauncher.cfg") else "PolyMC" if os.path.exists(f"{instance_dir}/../../../polymc.cfg") else "MultiMC"
+		print(f"mcmodman has detected that this instance is managed by {p}\nwould you like to enable dual indexing for {p} compatibility?")
+		logger.info("found instance.cfg, instance is likely managed by a MultiMC fork")
 		prismcomp = input(":: Enable dual indexing? [Y/n]: ")
 		if prismcomp.lower() == "y" or prismcomp == "":
 			return "packwiz"
 
 	return None
 
-def add_instance():
-	name = input(":: Enter instance name: ")
-	path = input(":: Enter instance path: ")
-	if name in instances.keys():
-		print(f"Instance '{name}' already exists")
+def instance_meta():
+	if len(args) < 3:
+		print("Usage: mcmodman --instance <add|select|remove>")
+		logger.error("--intsance flag missing arguments")
 		return
+	name = args[2]
+	if args[1] == "add":
+		if len(args) < 4:
+			print("Usage: mcmodman --instance add <name> <path>")
+			logger.error("--intsance flag missing arguments")
+		if name in instances.keys():
+			print(f"Instance '{name}' already exists")
+			return
 
-	instances[name] = {"name": name, "path": path}
-	with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
-		toml.dump(instances, f)
-	print(f"Added instance '{name}'")
-
-def sel_instance():
-	name = input(":: Enter instance name: ")
-	if name in instances:
-		config["selected-instance"] = name
-		with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
-			toml.dump(config, f)
-		print(f"Selected instance '{name}'")
-		return
-	print(f"Instance '{name}' not found")
-
-def del_instance():
-	name = input(":: Enter instance name: ")
-	if name == config["selected-instance"]:
-		print("cant delete selected instance")
-		return
-	for i, instance in enumerate(config["instances"]):
-		if instance["name"] == name:
-			del config["instances"][i]
-			with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
-				toml.dump(instances, f)
-			print(f"Deleted instance '{name}'")
+		instances[name] = {"name": name, "path": args[3]}
+		with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
+			toml.dump(instances, f)
+		print(f"Added instance '{name}'")
+	if args[1] == "select":
+		if name in instances:
+			config["selected-instance"] = name
+			with open(f"{config_dir}/config.toml", 'w',  encoding='utf-8') as f:
+				toml.dump(config, f)
+			print(f"Selected instance '{name}'")
 			return
 	print(f"Instance '{name}' not found")
+	if args[1] == "remove":
+		name = input(":: Enter instance name: ")
+		if name == config["selected-instance"]:
+			print("cant delete selected instance")
+			return
+		for i, instance in enumerate(config["instances"]):
+			if instance["name"] == name:
+				del config["instances"][i]
+				with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
+					toml.dump(instances, f)
+				print(f"Deleted instance '{name}'")
+				return
+		print(f"Instance '{name}' not found")
 
-
-parser = ArgumentParser(description='mcmodman')
-parser.add_argument('-S', nargs='+', type=str, help='-S [mods to download]', dest="addbyslug", default=SUPPRESS)
-parser.add_argument('-U', nargs='+', type=str, help='-U [mods to update]', dest="update", default=SUPPRESS)
-parser.add_argument('-R', nargs='+', type=str, help='-R [mods to remove]', dest="remove", default=SUPPRESS)
-parser.add_argument('-Q', nargs='*', type=str, help='-Q [mods to query]', dest="query", default=SUPPRESS)
-parser.add_argument('-T', nargs='+', type=str, help='-T [mods to toggle]', dest="toggle", default=SUPPRESS)
-parser.add_argument('-F', nargs='+', type=str, help='-F [mods to search for]', dest="search", default=SUPPRESS)
-parser.add_argument('-D', nargs='+', type=str, help='-D [mods to downgrade]', dest="downgrade", default=SUPPRESS)
-parser.add_argument('-cc', nargs='?', const=True, type=str, help='clear cache, -cc expired|api|all', default=SUPPRESS)
-parser.add_argument('--instance', nargs='?', const=True, type=str, help='instance add|select|remove', default=SUPPRESS)
-parser.add_argument('--version', action="store_true", help='-version', default=SUPPRESS)
-args=parser.parse_args()
+args = argv
+if args[0] == "mcmodman.py":
+	del args[0]
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
@@ -170,7 +161,7 @@ else:
 	instances = toml.load(f"{config_dir}/instances.toml")
 	logger.info("instances %s", instances)
 
-if "instance" not in args:
+if "--instance" not in args:
 	cache_dir = appdirs.user_cache_dir("ekno/mcmodman")
 	logger.info("Cache directory: %s", cache_dir)
 	if not os.path.exists(cache_dir):

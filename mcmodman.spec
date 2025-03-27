@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['mcmodman.py', 'indexing.py', 'commons.py', 'modrinth.py'],
+    ['mcmodman.py', 'indexing.py', 'commons.py', 'modrinth.py', 'dataversion.json'],
     pathex=[],
     binaries=[],
     datas=[],
