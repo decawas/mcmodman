@@ -1,6 +1,9 @@
-# pylint: disable=C0114 C0116 C0410 E0606 W0621
+# pylint: disable=C0116 C0410 E0606 W0621
+"""
+defines common variables, and meta-instance functions
+"""
 from argparse import ArgumentParser, SUPPRESS
-import logging, re, os, json, appdirs, toml
+import logging, re, os, json, appdirs, toml, sys
 
 __version__ = "25.3+"
 
@@ -30,15 +33,20 @@ def instance_firstrun():
 				break
 		managefile["modfolder"] = "plugins" if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None else "mods"
 
-		comp = compdetect()
-		if comp is not None:
-			managefile["index-compatibity"] = comp
+		managefile["index-compatibity"] = compdetect()
 	elif os.path.exists(os.path.expanduser(f"{instance_dir}/level.dat")):
-		advancements = os.listdir(os.path.expanduser(f"{instance_dir}/advancements"))
-		with open(os.path.expanduser(f"{instance_dir}/advancements/{advancements[0]}"), "r", encoding="utf-8") as f:
+		from pathlib import Path
+
+		advancements = sorted(Path(os.path.expanduser(f"{instance_dir}/advancements")).iterdir(), key=os.path.getmtime)
+		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
 			log = json.loads(f.read())
 		with open("dataversion.json", "r", encoding="utf-8") as f:
 			dataversions = json.loads(f.read())
+
+		if "DataVersion" not in log or log["DataVersion"] < 1444:
+			print("This world is too old, please upgrade to a more recent version to use datapacks")
+			logger.warning("This world is too old, please upgrade to a more recent version to use datapacks")
+			raise SystemExit
 
 		loaders = ["datapack"]
 		match = dataversions[0][str(log["DataVersion"])]
@@ -47,10 +55,9 @@ def instance_firstrun():
 		print("instance must be run at least once before using mcmodman")
 		raise SystemExit
 
-	if len(loaders) > 1:
-		if loaders[0] not in ["folia", "purper", "paper", "spigot"]:
-			print("mcmodman does not support instances with multiple loaders")
-			raise RuntimeError("mcmodman does not support instances with multiple loaders")
+	if len(loaders) > 1 and loaders[0] not in ["folia", "purper", "paper", "spigot"]:
+		print("mcmodman does not support instances with multiple loaders")
+		raise RuntimeError("mcmodman does not support instances with multiple loaders")
 	if not loaders:
 		print("Could not find any mod loaders for this instance\nif you are using Rift or RML you will have to manually set that")
 		loaders = ["vanilla"]
@@ -70,8 +77,8 @@ def instance_firstrun():
 	with open(f"{instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
 		toml.dump(managefile, f)
 		logger.info("writing mcmodman_managed.toml to instance")
-	if not os.path.exists(f"{instance_dir}/.content"):
-		os.makedirs(f"{instance_dir}/.content")
+
+	os.makedirs(f"{instance_dir}/.content")
 
 def compdetect():
 	if os.path.exists(f"{instance_dir}/../instance.cfg"):

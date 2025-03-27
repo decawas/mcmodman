@@ -1,4 +1,7 @@
-# pylint: disable=C0114 C0116 C0410 W0106
+# pylint: disable=C0116 C0410 W0106
+"""
+handling for the modrinth mod source
+"""
 from hashlib import sha512
 from time import time
 from shutil import copyfile
@@ -60,28 +63,25 @@ def parse_api(api_data):
 		return "Modpack"
 
 	mod_loader = commons.instancecfg["loader"] if ptype == "mod" else api_data["loaders"][0] if ptype in ["shader", "resourcepack"] else "datapack" if ptype == "datapack" else ""
-	if ptype in ["shader", "resourcepack"]:
-		if os.path.exists(os.path.join(commons.instance_dir, "server.properties")):
-			print(f"{ptype}s do not work on servers, skipping")
-			logger.warning("content of type '%s' can not be used on servers", ptype)
-			return ptype
-	elif ptype == "datapack":
-		if not os.path.exists("level.dat"):
-			print("mcmodman only supports datapacks for worlds, skipping")
-			logger.warning("content of type '%s' can only be used on worlds", ptype)
-			return ptype
+	if ptype in ["shader", "resourcepack"] and not commons.instancecfg["type"] == "client":
+		print(f"{ptype}s do not work on servers, skipping")
+		logger.warning("content of type '%s' can not be used on servers", ptype)
+		return ptype
+	elif ptype == "datapack" and not commons.instancecfg["type"] == "world":
+		print("mcmodman only supports datapacks for worlds, skipping")
+		logger.warning("content of type '%s' can only be used on worlds", ptype)
+		return ptype
 
 	matches = {"release": [], "beta": [], "alpha": []}
 	for version in api_data["versions"]:
 		if commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
 			matches[version["version_type"]].append(version)
+	matches = matches["release"] + matches["beta"] + (matches["alpha"])
 	if not matches:
 		print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
-	matches = matches["release"] + matches["beta"] + (matches["alpha"])
 	return matches
-
 
 def get_api(slug, depcheck=False):
 	if os.path.exists(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml")):
@@ -152,14 +152,8 @@ def project_get_type(api_data):
 		ptype = api_data["project_type"]
 		folder = os.path.join(commons.instance_dir, "shaderpacks" if api_data["project_type"] == "shader" else "resourcepacks")
 	elif api_data["project_type"] == "mod":
-		if commons.instancecfg["loader"] in api_data["loaders"]:
-			ptype = "mod"
-			folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
-		elif "datapack" in api_data["loaders"]:
-			ptype = "datapack"
-			folder = os.path.join(commons.instance_dir, "datapacks")
-		else:
-			raise ValueError
+		ptype = "mod"
+		folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
 	else:
 		raise ValueError
 
