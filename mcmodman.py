@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 def add_mod():
 	slugs = commons.args[1:]
+	if "-Ua" in commons.args:
+		slugs += query_mod()
+	slugs = list(set(slugs))
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in mods:
 		mod["index"] = indexing.get(mod["slug"])
@@ -95,11 +98,14 @@ def confirm(mods, changetype):
 def query_mod(slugs=None):
 	slugs = commons.args[1:] if slugs is None else slugs
 	if not slugs:
+		installed = []
 		for file in os.listdir(f"{commons.instance_dir}/.content"):
 			if ".mm.toml" in file:
-				index = toml.load(f"{commons.instance_dir}/.content/{file}")
-				print(file[:-8], index["version"])
+				index = indexing.get(file[:-8])
+				print(index["slug"], index["version"])
 				logger.info("Found mod %s", file)
+				installed.append(index["slug"])
+		return installed
 	elif isinstance(slugs, list):
 		for slug in slugs:
 			if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
@@ -226,7 +232,7 @@ def convert_bytes(size):
 	return f"{size:.2f} {unit}"
 
 def main():
-	operations = {"-S": add_mod, "-U": add_mod, "-R": remove_mod, "-cc": clear_cache, "-Q": query_mod, "-T": toggle_mod, "-F": search_mod, "-D": downgrade_mod,
+	operations = {"-S": add_mod, "-U": add_mod, "-Ua": add_mod, "-R": remove_mod, "-cc": clear_cache, "-Q": query_mod, "-T": toggle_mod, "-F": search_mod, "-D": downgrade_mod,
 		"--instance": commons.instance_meta, "version": lambda _: print(commons.__version__)}
 
 	if not commons.args:

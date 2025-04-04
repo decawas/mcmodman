@@ -15,6 +15,7 @@
    mcmodman -U mod1 mod2 mod3 ...
    ```
    This updates existing mods to their latest versions.
+   has an optional "a" flag (-Ua) for updating all installed mods
 
 3. **Remove Mods**:
    ```
