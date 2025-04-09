@@ -7,10 +7,11 @@ import logging, os, toml, commons, modrinth, indexing, instance
 
 logger = logging.getLogger(__name__)
 
-def add_mod():
-	slugs = commons.args["slugs"]
-	if commons.args["all"]:
-		slugs += query_mod()
+def add_mod(slugs = None, checkeddependencies=[], depinfo={}):
+	if slugs == None:
+		slugs = commons.args["slugs"]
+		if commons.args["all"]:
+			slugs += query_mod()
 	slugs = list(set(slugs))
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in mods:
@@ -25,28 +26,41 @@ def add_mod():
 		if isinstance(mod["api_data"], dict):
 			logger.info("Successfully got api data for mod '%s'", mod['slug'])
 			mod["api_data"]["versions"] = modrinth.parse_api(mod["api_data"])
-			if isinstance(mod["api_data"]["versions"], str) or mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
+			if isinstance(mod["api_data"]["versions"], str):
 				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
+			if mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
+				print(f"Mod '{mod["slug"]} already up to date")
+				mods.remove(mod)
 
-	checkeddependencies = []
+	checkeddependencies += [mod["api_data"]["id"] for mod in mods]
+	depslugs = []
 	for mod in mods:
 		for dependency in mod["api_data"]["versions"][0]["dependencies"]:
 			if dependency["project_id"] not in checkeddependencies:
 				dep_api_data = modrinth.get_api(dependency["project_id"], depcheck=True)
 				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({'optional' if dependency['dependency_type'] == 'optional' else 'required'})")
 				checkeddependencies.append(dependency["project_id"])
+				if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"]:
+					depinfo[dep_api_data["slug"]] = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
+					print(depinfo)
+					depslugs.append(dep_api_data["slug"])
+	
+	if depslugs and not commons.args["all"] and not commons.args["explicit"]:
+		add_mod(slugs=depslugs, checkeddependencies=checkeddependencies, depinfo=depinfo)
 
 	if not mods:
 		print("all mods up to date")
 		return
 
-	confirm(mods, "download")
+	if not commons.args["auto-confirm"]:
+		confirm(mods, "download")
+	
 	for mod in mods:
 		_, folder = modrinth.project_get_type(mod["api_data"])
 		modrinth.get_mod(mod["slug"], mod["api_data"], mod["index"])
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod['slug'], mod['api_data']['versions'][0]['files'][0]['size'])
-		indexing.mcmm(mod['slug'], mod['api_data'])
+		indexing.mcmm(mod['slug'], mod['api_data'], "explicit" if slugs == commons.args["slugs"] else depinfo[mod['slug']])
 		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")):
 			print(f"Caching mod '{mod['slug']}'")
 			copyfile(os.path.join(commons.instance_dir, folder, mod['api_data']['versions'][0]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", mod['api_data']['versions'][0]['files'][0]['filename']))
@@ -68,7 +82,8 @@ def remove_mod():
 		print("no mods found")
 		return
 
-	confirm(mods, "remove")
+	if not commons.args["auto-confirm"]:
+		confirm(mods, "remove")
 
 	for mod in mods:
 		os.remove(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml")
@@ -101,7 +116,16 @@ def query_mod(slugs=None):
 		for file in os.listdir(f"{commons.instance_dir}/.content"):
 			if ".mm.toml" in file:
 				index = indexing.get(file[:-8])
-				print(index["slug"], index["version"])
+				if commons.args["all"]:
+					pass
+				elif commons.args["explicit"] and not index["reason"] == "explicit":
+					continue
+				elif commons.args["depedency"] and not index["reason"] == "dependency":
+					continue
+				elif commons.args["optional"] and not index["reason"] == "optional":
+					continue
+				if commons.args["operation"] == "query":
+					print(index["slug"], index["version"])
 				logger.info("Found mod %s", file)
 				installed.append(index["slug"])
 		return installed
@@ -175,7 +199,8 @@ def downgrade_mod():
 
 		mod["api_data"]['versions'][0] = mod["api_data"]['versions'][choice]
 
-	confirm(mods, "download")
+	if not commons.args["auto-confirm"]:
+		confirm(mods, "download")
 
 	for mod in mods:
 		_, folder = modrinth.project_get_type(mod["api_data"])
@@ -258,7 +283,6 @@ if __name__ == "__main__":
 		print(f"error: could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
 		logger.critical("Process interrupted by user")
 		logger.info("Exiting")
-		raise
 	except RuntimeError as e:
 		print("An error occurred while running mcmodman")
 		logger.critical(e)

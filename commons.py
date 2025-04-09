@@ -16,17 +16,17 @@ def argparse():
 		logger.warning("No operation specified")
 		raise SystemExit
 
-	if argv[0] in ("-S", "-Sa"):
+	if argv[0][:2] == "-S":
 		args["operation"] = "sync"
-	elif argv[0] in ("-U", "-Ua"):
+	elif argv[0][:2] == "-U":
 		args["operation"] = "update"
-	elif argv[0] == "-R":
+	elif argv[0][:2] == "-R":
 		args["operation"] = "remove"
 	elif argv[0] == "-T":
 		args["operation"] = "toggle"
-	elif argv[0] == "-Q":
+	elif argv[0][:2] == "-Q":
 		args["operation"] = "query"
-	elif argv[0] == "-D":
+	elif argv[0][:2] == "-D":
 		args["operation"] = "downgrade"
 	elif argv[0] == "-F":
 		args["operation"] = "search"
@@ -46,6 +46,10 @@ def argparse():
 		args["name"] = None if len(argv) < 3 else argv[2]
 		args["path"] = None if len(argv) < 4 else argv[3]
 	args["all"] = "a" in argv[0]
+	args["explicit"] = "e" in argv[0]
+	args["depedency"] = "d" in argv[0]
+	args["optional"] = "p" in argv[0]
+	args["auto-confirm"] = "y" in argv[0]
 	args["lock"] = argv[0][1] in ["S", "U", "R", "T", "D"]
 
 	return args
@@ -67,7 +71,7 @@ if os.path.exists(f"{config_dir}/config.toml"):
 	config = toml.load(f"{config_dir}/config.toml")
 else:
 	with open(f"{config_dir}/config.toml", "w", encoding="utf-8") as f:
-		config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft"}
+		config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft", "get-optional-dependencies": False}
 		toml.dump(config, f)
 
 if not os.path.exists(f"{config_dir}/instances.toml"):

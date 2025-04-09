@@ -6,12 +6,12 @@ from modrinth import project_get_type
 
 logger = logging.getLogger(__name__)
 
-def mcmm(slug, mod_data):
+def mcmm(slug, mod_data, reason="explicit"):
 	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
 	_, folder = project_get_type(mod_data)
-	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["id"], 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["project_type"], "folder": folder, 'hash': mod_data['versions'][0]['files'][0]['hashes']['sha512'], 'hash-format': 'sha512', 'mode': 'url', 'url': mod_data['versions'][0]["files"][0]["url"], 'source': 'modrinth', 'game-version': commons.minecraft_version, 'reason': "explicit"}
+	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["id"], 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["project_type"], "folder": folder, 'hash': mod_data['versions'][0]['files'][0]['hashes']['sha512'], 'hash-format': 'sha512', 'mode': 'url', 'url': mod_data['versions'][0]["files"][0]["url"], 'source': 'modrinth', 'game-version': commons.minecraft_version, 'reason': reason}
 	if commons.instancecfg["loader"] in mod_data["loaders"]:
 		pass
 	elif "datapack" in mod_data["loaders"]:
