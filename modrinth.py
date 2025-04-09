@@ -1,6 +1,5 @@
-# pylint: disable=C0116 C0410 W0106
 """
-handling for the modrinth mod source
+modrinth api functions
 """
 from hashlib import sha512
 from time import time
@@ -87,7 +86,7 @@ def get_api(slug, depcheck=False):
 	if os.path.exists(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml")):
 		cache_data = toml.load(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"))
 		if time() - cache_data["time"] < commons.config["api-expire"] and cache_data["api-cache-version"] == 2:
-			print(f"Using cached api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
+			print(f"Using cached api data for mod '{slug}'\n" if not depcheck else "", end='', flush=True)
 			mod_data = cache_data["mod-api"]
 			logger.info("Found cached api data for mod %s at %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		else:
@@ -95,7 +94,7 @@ def get_api(slug, depcheck=False):
 
 	if "cache_data" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
-		print(f"Fetching api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
+		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='', flush=True)
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		if response.status_code != 200:
@@ -110,7 +109,7 @@ def get_api(slug, depcheck=False):
 		cache_data = {"time": time(), "api-cache-version": 2, "mod-api": mod_data}
 		logger.info("Caching api data for mod %s to %s", slug, commons.cache_dir + '/modrinth-api/' + slug + '.mmcache.toml')
 		with open(os.path.join(commons.cache_dir, "modrinth-api", f"{slug}.mmcache.toml"), 'w',  encoding='utf-8') as file:
-			print(f"Caching api data for mod '{slug}'\n", end='', flush=True) if not depcheck else None
+			print(f"Caching api data for mod '{slug}'\n" if not depcheck else "", end='', flush=True)
 			toml.dump(cache_data, file)
 		if slug != mod_data['slug']:
 			with open(os.path.join(commons.cache_dir, "modrinth-api", f"{mod_data['slug']}.mmcache.toml"), 'w',  encoding='utf-8') as file:

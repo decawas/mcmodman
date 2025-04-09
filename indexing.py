@@ -1,4 +1,3 @@
-# pylint: disable=C0116 C0410
 """
 handles indexing for content
 """
@@ -40,7 +39,7 @@ def packwiz(slug, mod_data):
 		file.write(index)
 
 def get(slug):
-	if commons.args[0] in ["-S", "-D"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+	if commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
 		index = {"slug": {slug},"filename": "-", "version": "None", "version-id": "None"}
 		logger.info("Created dummy index for mod new '%s'", slug)
 		return index

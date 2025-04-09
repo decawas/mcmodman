@@ -1,16 +1,15 @@
-# pylint: disable=C0116 C0410
 """
 main logic, and functions with front-end functionality
 """
 from shutil import copyfile
 from time import time
-import logging, os, toml, commons, modrinth, indexing
+import logging, os, toml, commons, modrinth, indexing, instance
 
 logger = logging.getLogger(__name__)
 
 def add_mod():
-	slugs = commons.args[1:]
-	if "-Ua" in commons.args:
+	slugs = commons.args["slugs"]
+	if commons.args["all"]:
 		slugs += query_mod()
 	slugs = list(set(slugs))
 	mods = [{'slug': slug} for slug in slugs]
@@ -56,7 +55,7 @@ def add_mod():
 		print(f"Mod '{mod['slug']}' successfully updated")
 
 def remove_mod():
-	slugs = commons.args[1:]
+	slugs = commons.args["slugs"]
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in reversed(mods):
 		mod["index"] = indexing.get(mod["slug"])
@@ -96,7 +95,7 @@ def confirm(mods, changetype):
 		raise SystemExit
 
 def query_mod(slugs=None):
-	slugs = commons.args[1:] if slugs is None else slugs
+	slugs = commons.args["slugs"] if slugs is None else slugs
 	if not slugs:
 		installed = []
 		for file in os.listdir(f"{commons.instance_dir}/.content"):
@@ -106,7 +105,7 @@ def query_mod(slugs=None):
 				logger.info("Found mod %s", file)
 				installed.append(index["slug"])
 		return installed
-	elif isinstance(slugs, list):
+	if isinstance(slugs, list):
 		for slug in slugs:
 			if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
 				index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
@@ -122,7 +121,7 @@ def query_mod(slugs=None):
 	return None
 
 def toggle_mod():
-	slugs = commons.args[1:]
+	slugs = commons.args["slugs"]
 	for slug in slugs:
 		index = indexing.get(slug)
 		if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index["filename"])):
@@ -137,7 +136,7 @@ def toggle_mod():
 			logger.info("Moved content '%s' from %s.disabled to %s", slug, index['filename'], index['filename'])
 
 def search_mod():
-	query = " ".join(commons.args[1:])
+	query = commons.args["query"]
 	logger.info("Getting search data for query '%s'", query)
 	query_data = modrinth.search_api(query)
 	if not query_data["hits"]:
@@ -150,7 +149,7 @@ def search_mod():
 		print(f"\t{hit['description'].splitlines()[0]}")
 
 def downgrade_mod():
-	slugs = commons.args[1:]
+	slugs = commons.args["slugs"]
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in mods:
 		mod["api_data"] = modrinth.get_api(mod["slug"])
@@ -197,7 +196,7 @@ def clear_cache():
 				os.remove(f"{commons.cache_dir}/modrinth-api/{file}")
 				logger.info("Deleted cache for %s", file.split('.')[0])
 				print(f"Deleted api cache for {file.split('.')[0]} (expired)")
-	if commons.args[1] == ("api" or "all") and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
+	if commons.args["suboperation"] == ("api" or "all") and len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
 		print("Are you sure you want to clear all api cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing all api cache? [Y/n]: ")
 		print("")
@@ -207,7 +206,7 @@ def clear_cache():
 			os.remove(f"{commons.cache_dir}/modrinth-api/{file}")
 			print(f"Deleted api cache for {file.split('.')[0]}")
 			logger.info("Deleted api cache for %s (clear all)", file.split('.')[0])
-	if commons.args[1] == "all" and len(os.listdir(os.path.join(commons.cache_dir, "mods"))) != 0:
+	if commons.args["suboperation"] == "all" and len(os.listdir(os.path.join(commons.cache_dir, "mods"))) != 0:
 		print("Are you sure you want to clear content cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing content cache? [y/N]: ")
 		print("")
@@ -231,23 +230,22 @@ def convert_bytes(size):
 		size /= 1024.0
 	return f"{size:.2f} {unit}"
 
-def main():
-	operations = {"-S": add_mod, "-U": add_mod, "-Ua": add_mod, "-R": remove_mod, "-cc": clear_cache, "-Q": query_mod, "-T": toggle_mod, "-F": search_mod, "-D": downgrade_mod,
-		"--instance": commons.instance_meta, "version": lambda _: print(commons.__version__)}
+class LockExistsError(Exception):
+	"error: could not lock instance: File Exists"
 
-	if not commons.args:
-		print("No operation specified")
-		logger.warning("No operation specified")
-	else:
-		operations[commons.args[0]]()
+def main():
+	operations = {"sync": add_mod, "update": add_mod, "remove": remove_mod, "clear-cache": clear_cache, "query": query_mod, "toggle": toggle_mod, "search": search_mod, "downgrade": downgrade_mod,
+		"instance": instance.instance_meta, "version": lambda _: print(commons.__version__)}
+
+	operations[commons.args["operation"]]()
 
 if __name__ == "__main__":
 	try:
-		if "instance" not in commons.args:
+		if commons.args["lock"]:
 			if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
 				print("mcmodman is already running for this instance")
 				logger.info("mcmodman.lock file already exists, exiting")
-				raise RuntimeError("mcmodman is already running for this instance")
+				raise LockExistsError("mcmodman is already running for this instance")
 
 			with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
 				logger.info("Setting lock")
@@ -256,6 +254,11 @@ if __name__ == "__main__":
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
 		logger.info("Process interrupted by user")
+	except LockExistsError:
+		print(f"error: could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
+		logger.critical("Process interrupted by user")
+		logger.info("Exiting")
+		raise
 	except RuntimeError as e:
 		print("An error occurred while running mcmodman")
 		logger.critical(e)
@@ -264,7 +267,7 @@ if __name__ == "__main__":
 		logger.critical(e)
 		raise
 	finally:
-		if "instance" not in commons.args and os.path.exists(os.path.expanduser(f"{commons.instance_dir}")):
+		if commons.args["lock"] and os.path.exists(os.path.expanduser(f"{commons.instance_dir}")):
 			logger.info("Removing lock")
 			os.remove(os.path.expanduser(f"{commons.instance_dir}/mcmodman.lock"))
 		logger.info("Exiting")
