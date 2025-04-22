@@ -6,10 +6,11 @@ import logging, os, appdirs, toml
 from instance import instance_firstrun
 
 __version__ = "25.3+"
+logger = logging.getLogger(__name__)
 
 def argparse():
 	args = {}
-	if argv[0] == "mcmodman.py":
+	if "mcmodman" in argv[0]:
 		del argv[0]
 	if not argv:
 		print("No operation specified")
@@ -35,7 +36,7 @@ def argparse():
 	elif argv[0] == "--instance":
 		args["operation"] = "instance"
 	else:
-		raise ValueError("Unknown operation")
+		raise InvalidOption("error: invalid option")
 
 	if argv[0][1] in ("S", "U", "R", "T", "Q", "D"):
 		args["slugs"] = argv[1:]
@@ -54,41 +55,51 @@ def argparse():
 
 	return args
 
-args = argparse()
+class InvalidOption(Exception):
+	"error: invalid option"
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(filename=f"{config_dir}/mcmodman.log", level=logging.NOTSET)
-logger.info("Starting mcmodman version %s", __version__)
-logger.info("Arguments: %s", args)
-
-logger.info("Config directory: %s", config_dir)
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
-if os.path.exists(f"{config_dir}/config.toml"):
-	config = toml.load(f"{config_dir}/config.toml")
-else:
-	with open(f"{config_dir}/config.toml", "w", encoding="utf-8") as f:
-		config = {"include-beta": False, "api-expire": 3600, "checksum": "Always", "selected-instance": "dotminecraft", "get-optional-dependencies": False}
+if not os.path.exists(os.path.expanduser(os.path.join(config_dir, "config.toml"))):
+	with open(os.path.expanduser(os.path.join(config_dir, "config.toml")), "w", encoding="utf-8") as f:
+		config = toml.load("config-template.toml")
+		config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
+		config["log-file"] = os.path.join(config_dir, "mcmodman.log")
 		toml.dump(config, f)
+else:
+	config = toml.load(os.path.join(config_dir, "config.toml"))
 
-if not os.path.exists(f"{config_dir}/instances.toml"):
-	with open(f"{config_dir}/instances.toml", 'w',  encoding='utf-8') as f:
+logging.basicConfig(filename=config["log-file"], level=logging.NOTSET)
+logger.info("Starting mcmodman version %s", __version__)
+
+logger.info("Config directory: %s", config_dir)
+
+try:
+	args = argparse()
+	logger.info("Arguments: %s", args)
+except InvalidOption:
+	print(f"error: invalid option")
+	logger.critical("invalid option")
+	raise SystemExit
+
+if not os.path.exists(os.path.join(config_dir, "instances.toml")):
+	with open(os.path.join(config_dir, "instances.toml"), 'w',  encoding='utf-8') as f:
 		instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
 		toml.dump(instances, f)
 else:
-	instances = toml.load(f"{config_dir}/instances.toml")
+	instances = toml.load(os.path.join(config_dir, "instances.toml"))
 	logger.info("instances %s", instances)
 
 if "--instance" not in args:
-	cache_dir = appdirs.user_cache_dir("ekno/mcmodman")
+	cache_dir = config["cache-dir"]
 	logger.info("Cache directory: %s", cache_dir)
 	if not os.path.exists(cache_dir):
 		os.makedirs(cache_dir)
-		os.makedirs(f"{cache_dir}/mods")
-		os.makedirs(f"{cache_dir}/modrinth-api")
+		os.makedirs(os.path.join(cache_dir, "mods"))
+		os.makedirs(os.path.join(cache_dir, "modrinth-api"))
 
 	selected_instance = config["selected-instance"]
 	if selected_instance in instances.keys():
@@ -97,7 +108,7 @@ if "--instance" not in args:
 		print("selected instance not found")
 		raise SystemExit
 
-	if not os.path.exists(f"{instance_dir}/mcmodman_managed.toml"):
+	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
 		instance_firstrun()
 
 	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")

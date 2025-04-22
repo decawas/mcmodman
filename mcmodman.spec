@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['mcmodman.py', 'indexing.py', 'commons.py', 'modrinth.py', 'instance.py', 'dataversion.json'],
+    ['mcmodman.py', 'indexing.py', 'commons.py', 'modrinth.py', 'instance.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('dataversion.json', 'dataversion.json'), ('config-template.toml', 'config-template.toml')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

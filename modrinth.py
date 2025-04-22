@@ -9,10 +9,9 @@ from requests import get
 import toml, commons
 
 def get_mod(slug, mod_data, index):
-	if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml")):
+	if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}")):
 		print(f"Using cached version for mod '{slug}'")
 		copyfile(os.path.join(commons.cache_dir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
-		copyfile(os.path.join(commons.cache_dir, "mods", f"{mod_data['versions'][0]['files'][0]['filename']}.mm.toml"), os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 		return
 
 	print(f"Downloading mod '{slug}'")

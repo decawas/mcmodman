@@ -7,11 +7,13 @@ import logging, os, toml, commons, modrinth, indexing, instance
 
 logger = logging.getLogger(__name__)
 
-def add_mod(slugs = None, checkeddependencies=[], depinfo={}):
-	if slugs == None:
+def add_mod(slugs = None, checkeddependencies=[], depinfo={}, fromdep=False):
+	if slugs is None:
 		slugs = commons.args["slugs"]
 		if commons.args["all"]:
 			slugs += query_mod()
+	if not slugs:
+		raise NoTargetsError
 	slugs = list(set(slugs))
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in mods:
@@ -30,8 +32,11 @@ def add_mod(slugs = None, checkeddependencies=[], depinfo={}):
 				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
 			if mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
-				print(f"Mod '{mod["slug"]} already up to date")
+				print(f"Mod '{mod["slug"]}' already up to date")
 				mods.remove(mod)
+			if mod["slug"] in commons.config["ignored-mods"]:
+				print(f"Mod '{mod["slug"]}' in ignored-mods, skipping")
+				mods.remove(mod["slug"])
 
 	checkeddependencies += [mod["api_data"]["id"] for mod in mods]
 	depslugs = []
@@ -45,31 +50,32 @@ def add_mod(slugs = None, checkeddependencies=[], depinfo={}):
 					depinfo[dep_api_data["slug"]] = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
 					print(depinfo)
 					depslugs.append(dep_api_data["slug"])
-	
+
 	if depslugs and not commons.args["all"] and not commons.args["explicit"]:
-		add_mod(slugs=depslugs, checkeddependencies=checkeddependencies, depinfo=depinfo)
+		add_mod(slugs=depslugs, checkeddependencies=checkeddependencies, depinfo=depinfo, fromdep=True)
 
 	if not mods:
-		print("all mods up to date")
+		print("all mods up to date\n" if not fromdep else "", end="")
 		return
 
 	if not commons.args["auto-confirm"]:
 		confirm(mods, "download")
-	
+
 	for mod in mods:
 		_, folder = modrinth.project_get_type(mod["api_data"])
 		modrinth.get_mod(mod["slug"], mod["api_data"], mod["index"])
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod['slug'], mod['api_data']['versions'][0]['files'][0]['size'])
-		indexing.mcmm(mod['slug'], mod['api_data'], "explicit" if slugs == commons.args["slugs"] else depinfo[mod['slug']])
-		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")):
+		indexing.mcmm(mod['slug'], mod['api_data'], "explicit" if not fromdep else depinfo[mod['slug']])
+		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}")):
 			print(f"Caching mod '{mod['slug']}'")
 			copyfile(os.path.join(commons.instance_dir, folder, mod['api_data']['versions'][0]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", mod['api_data']['versions'][0]['files'][0]['filename']))
-			copyfile(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml"), os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml"))
 			logger.info("Copied content '%s' to cache", {mod['slug']})
 		print(f"Mod '{mod['slug']}' successfully updated")
 
 def remove_mod():
 	slugs = commons.args["slugs"]
+	if not slugs:
+		raise NoTargetsError
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in reversed(mods):
 		mod["index"] = indexing.get(mod["slug"])
@@ -77,6 +83,8 @@ def remove_mod():
 			print(f"Mod '{mod['slug']}' is not installed")
 			logger.error("Could not load index '%s' because it is not installed", {mod['slug']})
 			mods.remove(mod)
+		if mod["slug"] in commons.config["ignored-mods"]:
+			commons.config["ignored-mods"].remove(mod["slug"])
 
 	if not mods:
 		print("no mods found")
@@ -174,6 +182,8 @@ def search_mod():
 
 def downgrade_mod():
 	slugs = commons.args["slugs"]
+	if not slugs:
+		raise NoTargetsError
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in mods:
 		mod["api_data"] = modrinth.get_api(mod["slug"])
@@ -181,7 +191,7 @@ def downgrade_mod():
 		mod["index"] = indexing.get(mod["slug"])
 
 		for i, version in enumerate(reversed(mod["api_data"]["versions"])):
-			suffix = "[INSTALLED]" if version['id'] == mod['index']['version-id'] else '[CACHED]' if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{version['files'][0]['filename']}.mm.toml")) else ''
+			suffix = "[INSTALLED]" if version['id'] == mod['index']['version-id'] else '[CACHED]' if os.path.exists(os.path.join(commons.cache_dir, "mods", f"{version['files'][0]['filename']}")) else ''
 			print(f"  {len(mod['api_data']['versions']) - i - 1})\tmodrinth/{mod['slug']}\t{version['version_number']}\t{suffix}")
 
 		choice = input(":: Choose version: ")
@@ -203,15 +213,21 @@ def downgrade_mod():
 		confirm(mods, "download")
 
 	for mod in mods:
+		ignore = input(f":: add {mod["slug"]} to ignored-packages? [y/N]: ")
+		if ignore.lower() == "y":
+			commons.config["ignored-mods"].append(mod["slug"])
+
 		_, folder = modrinth.project_get_type(mod["api_data"])
 		modrinth.get_mod(mod['slug'], mod["api_data"], mod["index"])
 		indexing.mcmm(mod['slug'], mod["api_data"])
-		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml")):
+		if not os.path.exists(os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}")):
 			print(f"Caching mod '{mod['slug']}'")
 			copyfile(os.path.join(commons.instance_dir, folder, mod['api_data']['versions'][0]['files'][0]['filename']), os.path.join(commons.cache_dir, "mods", mod['api_data']['versions'][0]['files'][0]['filename']))
-			copyfile(os.path.join(commons.instance_dir, ".content", f"{mod['slug']}.mm.toml"), os.path.join(commons.cache_dir, "mods", f"{mod['api_data']['versions'][0]['files'][0]['filename']}.mm.toml"))
 			logger.info("Copied content '%s' to cache", {mod['slug']})
 		print(f"Mod '{mod['slug']}' successfully updated")
+
+	with open(os.path.join(commons.config_dir, "config.toml"), "w") as f:
+		toml.dump(commons.config, f)
 
 def clear_cache():
 	if len(os.listdir(f'{commons.cache_dir}/modrinth-api')) != 0:
@@ -257,6 +273,8 @@ def convert_bytes(size):
 
 class LockExistsError(Exception):
 	"error: could not lock instance: File Exists"
+class NoTargetsError(Exception):
+	"error: no targets specified"
 
 def main():
 	operations = {"sync": add_mod, "update": add_mod, "remove": remove_mod, "clear-cache": clear_cache, "query": query_mod, "toggle": toggle_mod, "search": search_mod, "downgrade": downgrade_mod,
@@ -281,8 +299,11 @@ if __name__ == "__main__":
 		logger.info("Process interrupted by user")
 	except LockExistsError:
 		print(f"error: could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
-		logger.critical("Process interrupted by user")
-		logger.info("Exiting")
+		logger.critical("already running for instance")
+		raise SystemExit
+	except NoTargetsError:
+		print(f"error: no targets specified")
+		logger.critical("already running for instance")
 	except RuntimeError as e:
 		print("An error occurred while running mcmodman")
 		logger.critical(e)
@@ -291,7 +312,7 @@ if __name__ == "__main__":
 		logger.critical(e)
 		raise
 	finally:
-		if commons.args["lock"] and os.path.exists(os.path.expanduser(f"{commons.instance_dir}")):
+		if commons.args["lock"] and os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock"))):
 			logger.info("Removing lock")
-			os.remove(os.path.expanduser(f"{commons.instance_dir}/mcmodman.lock"))
+			os.remove(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock")))
 		logger.info("Exiting")
