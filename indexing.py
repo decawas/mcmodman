@@ -2,7 +2,7 @@
 handles indexing for content
 """
 import logging, os, toml, commons
-from modrinth import project_get_type
+from modrinth import projectGetType
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +10,7 @@ def mcmm(slug, mod_data, reason="explicit"):
 	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
-	_, folder = project_get_type(mod_data)
+	_, folder = projectGetType(mod_data)
 	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["id"], 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["project_type"], "folder": folder, 'hash': mod_data['versions'][0]['files'][0]['hashes']['sha512'], 'hash-format': 'sha512', 'mode': 'url', 'url': mod_data['versions'][0]["files"][0]["url"], 'source': 'modrinth', 'game-version': commons.minecraft_version, 'reason': reason}
 	if commons.instancecfg["loader"] in mod_data["loaders"]:
 		pass
@@ -35,16 +35,16 @@ def packwiz(slug, mod_data):
 	elif mod_data["server_side"] == "unsupported":
 		index["side"] = "client"
 	index = toml.dumps(index)[:-1]
-	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index" f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
+	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
 		file.write(index)
 
-def get(slug):
-	if commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-		index = {"slug": {slug},"filename": "-", "version": "None", "version-id": "None"}
-		logger.info("Created dummy index for mod new '%s'", slug)
-		return index
+def get(slug, reason="explicit"):
 	if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
 		index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 		logger.info("Loaded index for mod '%s'", slug)
+		return index
+	elif commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+		index = {"slug": {slug},"filename": "-", "version": "None", "version-id": "None", "reason": reason}
+		logger.info("Created dummy index for mod new '%s'", slug)
 		return index
 	return None

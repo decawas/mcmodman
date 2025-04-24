@@ -3,7 +3,7 @@ defines common variables, and meta-instance functions
 """
 from sys import argv
 import logging, os, appdirs, toml
-from instance import instance_firstrun
+from instance import instanceFirstrun
 
 __version__ = "25.3+"
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def argparse():
 		args["slugs"] = argv[1:]
 	elif argv[0][1] == "F":
 		args["query"] = "".join(argv[1:])
-	elif argv[0] == "--instance" or argv[0] == "--cc":
+	elif argv[0] in ["--instance", "--cc"]:
 		args["suboperation"] = argv[1]
 		args["name"] = None if len(argv) < 3 else argv[2]
 		args["path"] = None if len(argv) < 4 else argv[3]
@@ -80,10 +80,10 @@ logger.info("Config directory: %s", config_dir)
 try:
 	args = argparse()
 	logger.info("Arguments: %s", args)
-except InvalidOption:
-	print(f"error: invalid option")
+except InvalidOption as e:
+	print("error: invalid option")
 	logger.critical("invalid option")
-	raise SystemExit
+	raise SystemExit from e
 
 if not os.path.exists(os.path.join(config_dir, "instances.toml")):
 	with open(os.path.join(config_dir, "instances.toml"), 'w',  encoding='utf-8') as f:
@@ -91,15 +91,15 @@ if not os.path.exists(os.path.join(config_dir, "instances.toml")):
 		toml.dump(instances, f)
 else:
 	instances = toml.load(os.path.join(config_dir, "instances.toml"))
-	logger.info("instances %s", instances)
+logger.info("instances %s", instances)
 
-if "--instance" not in args:
-	cache_dir = config["cache-dir"]
-	logger.info("Cache directory: %s", cache_dir)
-	if not os.path.exists(cache_dir):
-		os.makedirs(cache_dir)
-		os.makedirs(os.path.join(cache_dir, "mods"))
-		os.makedirs(os.path.join(cache_dir, "modrinth-api"))
+if "instance" not in args:
+	cacheDir = config["cache-dir"]
+	logger.info("Cache directory: %s", cacheDir)
+	if not os.path.exists(cacheDir):
+		os.makedirs(cacheDir)
+		os.makedirs(os.path.join(cacheDir, "mods"))
+		os.makedirs(os.path.join(cacheDir, "modrinth-api"))
 
 	selected_instance = config["selected-instance"]
 	if selected_instance in instances.keys():
@@ -109,10 +109,10 @@ if "--instance" not in args:
 		raise SystemExit
 
 	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
-		instance_firstrun()
+		instanceFirstrun(instance_dir)
 
-	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
-	mod_loader = instancecfg["loader"]
-	minecraft_version = instancecfg["version"]
+instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
+mod_loader = instancecfg["loader"]
+minecraft_version = instancecfg["version"]
 
-	logger.info("instance %s", instancecfg)
+logger.info("instance %s", instancecfg)

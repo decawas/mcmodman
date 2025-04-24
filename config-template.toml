@@ -1,0 +1,7 @@
+cache-dir = "auto"
+log-file = "auto"
+api-expire = 3600
+checksum = "Always"
+selected-instance = "dotminecraft"
+get-optional-dependencies = false
+ignored-mods = []
