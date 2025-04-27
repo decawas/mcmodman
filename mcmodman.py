@@ -17,8 +17,8 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in reversed(mods):
 		if mod["slug"] in commons.config["ignored-mods"]:
-				print(f"Mod '{mod["slug"]}' in ignored-mods, skipping")
-				mods.remove(mod)
+			print(f"Mod '{mod["slug"]}' in ignored-mods, skipping")
+			mods.remove(mod)
 		if mod["slug"] not in reasons and mod["slug"] in commons.args["slugs"]:
 			reasons[mod["slug"]] = "explicit"
 		mod["index"] = indexing.get(mod["slug"], reason=reasons[mod["slug"]])
@@ -35,10 +35,9 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 			if isinstance(mod["api_data"]["versions"], str):
 				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
-			if mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
+			elif mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
 				print(f"Mod '{mod["slug"]}' already up to date")
 				mods.remove(mod)
-			
 
 	checkeddependencies += [mod["api_data"]["id"] for mod in mods]
 	depslugs = []
@@ -63,20 +62,23 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 		confirm(mods, "download")
 
 	for mod in mods:
+		if queryMod([mod["slug"]]):
+			removeMod([mod["slug"]], fromadd=True)
 		_, folder = modrinth.projectGetType(mod["api_data"])
 		modrinth.getMod(mod["slug"], mod["api_data"], mod["index"])
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod['slug'], mod['api_data']['versions'][0]['files'][0]['size'])
 		indexing.mcmm(mod['slug'], mod['api_data'], mod['index']['reason'])
 		cache.setModCache(mod['api_data']['versions'][0]['files'][0]['filename'], folder)
 
-def removeMod():
-	slugs = commons.args["slugs"]
+def removeMod(slugs=None, fromadd=False):
+	if slugs is None:
+		slugs = commons.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
 	mods = [{'slug': slug} for slug in slugs]
 	for mod in reversed(mods):
 		mod["index"] = indexing.get(mod["slug"])
-		if mod["index"] is None:
+		if mod["index"] is None or mod["index"]["version"] == "None":
 			print(f"Mod '{mod['slug']}' is not installed")
 			logger.error("Could not load index '%s' because it is not installed", {mod['slug']})
 			mods.remove(mod)
@@ -87,16 +89,18 @@ def removeMod():
 		print("no mods found")
 		return
 
-	if not commons.args["auto-confirm"]:
+	if not commons.args["auto-confirm"] and not fromadd:
 		confirm(mods, "remove")
 
 	for mod in mods:
+		print(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
 		os.remove(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml")
-		os.remove(os.path.join(commons.instance_dir, mod["index"]["folder"], mod["index"]["filename"]))
+		os.remove(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
 		logger.info("Removed content '%s'", {mod['slug']})
 		if "index-compatibility" in commons.instancecfg:
-			os.remove(os.path.join(commons.instance_dir, mod["index"]["folder"], ".index", f"{mod['slug']}.pw.toml"))
-		print(f"Removed mod '{mod['slug']}'")
+			os.remove(os.path.join(mod["index"]["folder"], ".index", f"{mod['slug']}.pw.toml"))
+		if not fromadd:
+			print(f"Removed mod '{mod['slug']}'")
 
 def confirm(mods, changetype):
 	print("")
@@ -208,6 +212,9 @@ def downgradeMod():
 		ignore = input(f":: add {mod["slug"]} to ignored-packages? [y/N]: ")
 		if ignore.lower() == "y":
 			commons.config["ignored-mods"].append(mod["slug"])
+		
+		if queryMod([mod["slug"]]):
+			removeMod([mod["slug"]], fromadd=True)
 
 		_, folder = modrinth.projectGetType(mod["api_data"])
 		modrinth.getMod(mod['slug'], mod["api_data"], mod["index"])
@@ -228,6 +235,8 @@ def convertBytes(size):
 class LockExistsError(Exception):
 	"error: could not lock instance: File Exists"
 class NoTargetsError(Exception):
+	"error: no targets specified"
+class TargetNotFoundError(Exception):
 	"error: no targets specified"
 
 def main():
@@ -270,3 +279,4 @@ if __name__ == "__main__":
 			logger.info("Removing lock")
 			os.remove(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock")))
 		logger.info("Exiting")
+		raise SystemExit

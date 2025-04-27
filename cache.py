@@ -14,9 +14,8 @@ def isAPICached(filename):
 	if not os.path.exists(path):
 		return False
 	cacheData = toml.load(path)
-	if time() - cacheData["time"] > commons.config["api-expire"] or cacheData["api-cache-version"] != APICACHEVERSION:
-		return False
-	return True
+	return time() - cacheData["time"] <= commons.config["api-expire"] and cacheData["api-cache-version"] == APICACHEVERSION
+
 
 def isModCached(f):
 	return os.path.exists(os.path.join(commons.cacheDir, "mods", f))
@@ -36,7 +35,7 @@ def setAPICache(slug, apiData):
 	path = os.path.join(commons.cacheDir, "modrinth-api", f"{slug}.{'modrinthquery' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
 	cacheData = {"time": time(), "api-cache-version": APICACHEVERSION, "mod-api": apiData}
 	logger.info(f"Caching data for {'query' if commons.args['operation'] == 'search' else 'mod'} '%s' to %s", slug, path)
-	if slug in commons.args["slugs"]:
+	if slug in commons.args["query" if commons.args['operation'] == "search" else "slugs"]:
 		print(f"Caching data for {'query' if commons.args['operation'] == 'search' else 'mod'} '{slug}'")
 	with open(path, "w", encoding="utf-8") as f:
 		toml.dump(cacheData, f)

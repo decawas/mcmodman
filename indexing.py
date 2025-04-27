@@ -17,17 +17,18 @@ def mcmm(slug, mod_data, reason="explicit"):
 	elif "datapack" in mod_data["loaders"]:
 		index["type"] = "datapack"
 
-	with open(f"{commons.instance_dir}/.content/{slug}.mm.toml", 'w',  encoding='utf-8') as f:
+	with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), 'w',  encoding='utf-8') as f:
 		toml.dump(index, f)
+		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 	if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod":
 		packwiz(slug, mod_data)
 
 def packwiz(slug, mod_data):
 	if not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index"))):
 		os.makedirs(os.path.expanduser(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index")))
-	index = {"filename": mod_data["files"][0]["filename"], "name": mod_data["title"]}
-	index["download"] = {"hash": mod_data["files"][0]["hashes"]["sha512"], "hash-format": "sha512", "mode": "url", "url": mod_data["files"][0]["url"]}
-	index["update"] = {"modrinth": {"mod-id": mod_data["project_id"] ,"version": mod_data["id"]}}
+	index = {"filename": mod_data['versions'][0]['files'][0]['filename'], "name": mod_data["title"]}
+	index["download"] = {"hash": mod_data['versions'][0]["files"][0]["hashes"]["sha512"], "hash-format": "sha512", "mode": "url", "url": mod_data['versions'][0]["files"][0]["url"]}
+	index["update"] = {"modrinth": {"mod-id": mod_data["id"] ,"version": mod_data["id"]}}
 
 	index["side"] = "both"
 	if mod_data["client_side"] == "unsupported":
@@ -36,6 +37,7 @@ def packwiz(slug, mod_data):
 		index["side"] = "client"
 	index = toml.dumps(index)[:-1]
 	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
+		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{slug}.pw.toml"))
 		file.write(index)
 
 def get(slug, reason="explicit"):
@@ -45,6 +47,6 @@ def get(slug, reason="explicit"):
 		return index
 	elif commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
 		index = {"slug": {slug},"filename": "-", "version": "None", "version-id": "None", "reason": reason}
-		logger.info("Created dummy index for mod new '%s'", slug)
+		logger.info("Created dummy index for new mod '%s'", slug)
 		return index
 	return None

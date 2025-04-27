@@ -22,7 +22,6 @@ def getMod(slug, mod_data, index):
 		return
 
 	_, folder = projectGetType(mod_data)
-
 	if folder == "":
 		with open("server.properties", "r", encoding="utf-8") as f:
 			properties = toml.loads(f.read())
@@ -36,7 +35,7 @@ def getMod(slug, mod_data, index):
 	elif commons.config["checksum"] == "Never":
 		perfcheck = False
 	else:
-		perfcheck = True
+		perfcheck = True	
 
 	if perfcheck:
 		print("Checking hash")
@@ -44,11 +43,8 @@ def getMod(slug, mod_data, index):
 			checksum = sha512(f.read()).hexdigest()
 		if mod_data["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
-			os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data['files'][0]['filename']))
-		return
-	if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']})):
-		print("Removing old version")
-		os.remove(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], {index['filename']}))
+			os.remove(os.path.join(commons.instance_dir, folder, mod_data["versions"][0]['files'][0]['filename']))
+			raise ChecksumError
 
 def parseAPI(api_data):
 	ptype, _ = projectGetType(api_data)
@@ -69,11 +65,11 @@ def parseAPI(api_data):
 
 	matches = {"release": [], "beta": [], "alpha": []}
 	for version in api_data["versions"]:
-		if commons.minecraft_version in version["game_versions"] and mod_loader in version["loaders"]:
+		if commons.minecraft_version in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			matches[version["version_type"]].append(version)
 	matches = matches["release"] + matches["beta"] + (matches["alpha"])
 	if not matches:
-		print(f"No matching versions found for mod '{api_data['slug']}'")
+		#print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
 	return matches
@@ -136,3 +132,6 @@ def projectGetType(api_data):
 	return ptype, folder
 
 logger = logging.getLogger(__name__)
+
+class ChecksumError(Exception):
+	"error: a mod failed the checksum"

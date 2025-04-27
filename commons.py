@@ -41,7 +41,7 @@ def argparse():
 	if argv[0][1] in ("S", "U", "R", "T", "Q", "D"):
 		args["slugs"] = argv[1:]
 	elif argv[0][1] == "F":
-		args["query"] = "".join(argv[1:])
+		args["query"] = " ".join(argv[1:])
 	elif argv[0] in ["--instance", "--cc"]:
 		args["suboperation"] = argv[1]
 		args["name"] = None if len(argv) < 3 else argv[2]
@@ -93,7 +93,7 @@ else:
 	instances = toml.load(os.path.join(config_dir, "instances.toml"))
 logger.info("instances %s", instances)
 
-if "instance" not in args:
+if "--instance" not in argv:
 	cacheDir = config["cache-dir"]
 	logger.info("Cache directory: %s", cacheDir)
 	if not os.path.exists(cacheDir):
@@ -111,8 +111,10 @@ if "instance" not in args:
 	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
 		instanceFirstrun(instance_dir)
 
-instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
-mod_loader = instancecfg["loader"]
-minecraft_version = instancecfg["version"]
+	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
+	mod_loader = instancecfg["loader"]
+	minecraft_version = instancecfg["version"]
 
-logger.info("instance %s", instancecfg)
+	logger.info("instance %s", instancecfg)
+
+	loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}

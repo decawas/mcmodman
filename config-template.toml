@@ -5,3 +5,8 @@ checksum = "Always"
 selected-instance = "dotminecraft"
 get-optional-dependencies = false
 ignored-mods = []
+
+# enable downloading mods for upstream mod loaders
+# for example downloading fabric mods when using a quilt client
+# enabling this feature may result in unexpected mod behaviour
+allow-upstream = false
