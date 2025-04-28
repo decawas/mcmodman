@@ -64,11 +64,18 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 	for mod in mods:
 		if queryMod([mod["slug"]]):
 			removeMod([mod["slug"]], fromadd=True)
-		_, folder = modrinth.projectGetType(mod["api_data"])
+		if mod["slug"] == "cardboard":
+			commons.instancecfg["translation-layer"] = "cardboard"
+			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+				toml.dump(commons.instancecfg, f)
+		if mod["slug"] in ["connector", "forgified-fabric-api"]:
+			commons.instancecfg["translation-layer"] = "sinytra"
+			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+				toml.dump(commons.instancecfg, f)
 		modrinth.getMod(mod["slug"], mod["api_data"], mod["index"])
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod['slug'], mod['api_data']['versions'][0]['files'][0]['size'])
 		indexing.mcmm(mod['slug'], mod['api_data'], mod['index']['reason'])
-		cache.setModCache(mod['api_data']['versions'][0]['files'][0]['filename'], folder)
+		cache.setModCache(mod['api_data']['versions'][0]['files'][0]['filename'], mod["api_data"]["versions"][0]["folder"])
 
 def removeMod(slugs=None, fromadd=False):
 	if slugs is None:
@@ -93,6 +100,10 @@ def removeMod(slugs=None, fromadd=False):
 		confirm(mods, "remove")
 
 	for mod in mods:
+		if mod["slug"] in ["cardboard", "connector"]:
+			commons.instancecfg["translation-layer"] = "None"
+			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+				toml.dump(commons.instancecfg, f)
 		print(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
 		os.remove(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml")
 		os.remove(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
@@ -142,7 +153,8 @@ def queryMod(slugs=None):
 				if len(slugs) == 1:
 					return True
 			else:
-				print(f"Mod '{slug}' was not found")
+				if commons.args["operation"] == "query":
+					print(f"Mod '{slug}' was not found")
 				logger.info("Couldnt find index for mod %s", {slug})
 				if len(slugs) == 1:
 					return False
@@ -215,6 +227,16 @@ def downgradeMod():
 		
 		if queryMod([mod["slug"]]):
 			removeMod([mod["slug"]], fromadd=True)
+		if mod["slug"] == "cardboard":
+			commons.instancecfg["translation-layer"] = "cardboard"
+			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+				toml.dump(commons.instancecfg, f)
+			if not os.path.exists(os.path.join(commons.instance_dir, "plugins")):
+				os.makedirs(os.path.join(commons.instance_dir, "plugins"))
+		if mod["slug"] in ["connector", "forgified-fabric-api"]:
+			commons.instancecfg["translation-layer"] = "sinytra"
+			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+				toml.dump(commons.instancecfg, f)
 
 		_, folder = modrinth.projectGetType(mod["api_data"])
 		modrinth.getMod(mod['slug'], mod["api_data"], mod["index"])
@@ -270,10 +292,11 @@ if __name__ == "__main__":
 	except RuntimeError as e:
 		print("An error occurred while running mcmodman")
 		logger.critical(e)
-	except Exception as e:
-		print("An unexpected error occured")
-		logger.critical(e)
 		raise
+	#except Exception as e:
+	#	print("An unexpected error occured", e)
+	#	logger.critical(e)
+	#	raise
 	finally:
 		if commons.args["lock"] and os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock"))):
 			logger.info("Removing lock")

@@ -38,7 +38,7 @@ def instanceFirstrun(instance_dir):
 				break
 		managefile["modfolder"] = "plugins" if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None else "mods"
 
-		managefile["index-compatibity"] = compdetect(instance_dir)
+		managefile["index-compatibility"] = compdetect(instance_dir)
 	elif os.path.exists(os.path.expanduser(f"{instance_dir}/level.dat")):
 		advancements = sorted(Path(os.path.expanduser(f"{instance_dir}/advancements")).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
@@ -77,11 +77,12 @@ def instanceFirstrun(instance_dir):
 	else:
 		raise RuntimeError("mcmodman could not find a minecraft version")
 
-	with open(f"{instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
+	with open(os.path.join(instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
 		toml.dump(managefile, f)
 		logger.info("writing mcmodman_managed.toml to instance")
 
-	os.makedirs(f"{instance_dir}/.content")
+	if not os.path.exists(os.path.join(instance_dir, ".content")):
+		os.makedirs(os.path.join(instance_dir, ".content"))
 	return managefile
 
 def compdetect(instanceDir):

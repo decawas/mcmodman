@@ -10,7 +10,7 @@ import toml, cache, commons
 def getMod(slug, mod_data, index):
 	if cache.isModCached(os.path.join(mod_data['versions'][0]['files'][0]['filename'])):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(os.path.join(commons.cacheDir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod_data["versions"][0]['files'][0]['filename']))
+		copyfile(os.path.join(commons.cacheDir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
 		return
 
 	print(f"Downloading mod '{slug}'")
@@ -27,7 +27,7 @@ def getMod(slug, mod_data, index):
 			properties = toml.loads(f.read())
 		folder = os.path.join(properties["level-name"], "datapacks")
 
-	with open(os.path.join(commons.instance_dir, folder, mod_data['versions'][0]["files"][0]["filename"]), "wb") as f:
+	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]["files"][0]["filename"]), "wb") as f:
 		f.write(response.content)
 
 	if commons.config["checksum"] in ["Always", "Download"]:
@@ -39,15 +39,15 @@ def getMod(slug, mod_data, index):
 
 	if perfcheck:
 		print("Checking hash")
-		with open(os.path.join(commons.instance_dir, folder, mod_data["versions"][0]['files'][0]['filename']), 'rb') as f:
+		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()
 		if mod_data["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
-			os.remove(os.path.join(commons.instance_dir, folder, mod_data["versions"][0]['files'][0]['filename']))
+			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
 			raise ChecksumError
 
 def parseAPI(api_data):
-	ptype, _ = projectGetType(api_data)
+	ptype, folder = projectGetType(api_data)
 	if ptype == "modpack":
 		print(f"{api_data['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
@@ -63,11 +63,18 @@ def parseAPI(api_data):
 		logger.warning("content of type '%s' can only be used on worlds", ptype)
 		return ptype
 
-	matches = {"release": [], "beta": [], "alpha": []}
+	matches = {"release": [], "beta": [], "alpha": [], "translation": []}
 	for version in api_data["versions"]:
 		if commons.minecraft_version in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+			version["folder"] = folder
 			matches[version["version_type"]].append(version)
-	matches = matches["release"] + matches["beta"] + (matches["alpha"])
+		if commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+			version["folder"] = "plugins"
+			matches["translation"].append(version)
+		if commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+			version["folder"] = "mods"
+			matches["translation"].append(version)
+	matches = matches["release"] + matches["beta"] + matches["alpha"] + matches["translation"]
 	if not matches:
 		#print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
@@ -116,14 +123,14 @@ def searchAPI(query):
 
 	return queryData
 
-def projectGetType(api_data):
-	if api_data["project_type"] == "modpack":
+def projectGetType(apiData):
+	if apiData["project_type"] == "modpack":
 		ptype = "modpack"
 		folder = ""
-	elif api_data["project_type"] in ["shader", "resourcepack"]:
-		ptype = api_data["project_type"]
-		folder = os.path.join(commons.instance_dir, "shaderpacks" if api_data["project_type"] == "shader" else "resourcepacks")
-	elif api_data["project_type"] == "mod":
+	elif apiData["project_type"] in ["shader", "resourcepack"]:
+		ptype = apiData["project_type"]
+		folder = os.path.join(commons.instance_dir, "shaderpacks" if apiData["project_type"] == "shader" else "resourcepacks")
+	elif apiData["project_type"] == "mod":
 		ptype = "mod"
 		folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
 	else:
