@@ -2,7 +2,7 @@
 main logic, and functions with front-end functionality
 """
 
-import logging, os, toml, cache, commons, modrinth, indexing, instance
+import logging, os, toml, cache, commons, modrinth, indexing, instance, local
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +21,26 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 			mods.remove(mod)
 		if mod["slug"] not in reasons and mod["slug"] in commons.args["slugs"]:
 			reasons[mod["slug"]] = "explicit"
+		mod["source"] = "local" if any(ext in mod["slug"] for ext in (".jar", ".zip")) else "modrinth"
 		mod["index"] = indexing.get(mod["slug"], reason=reasons[mod["slug"]])
+		if mod["index"].get("source") != None:
+			mod["source"] = mod["index"]["source"]
 
 	if not any('index' in d for d in mods):
 		print("all mods updated or not found")
 		return
 
 	for mod in reversed(mods):
-		mod["api_data"] = modrinth.getAPI(mod["slug"])
+		mod["api_data"] = sources[mod["source"]].getAPI(mod["slug"])
 		if isinstance(mod["api_data"], dict):
 			logger.info("Successfully got api data for mod '%s'", mod['slug'])
-			mod["api_data"]["versions"] = modrinth.parseAPI(mod["api_data"])
+			mod["api_data"]["versions"] = sources[mod["source"]].parseAPI(mod["api_data"])
+			if mod["source"] == "local":
+				mod["slug"] = mod["api_data"]["versions"][0]["slug"]
+				mod["index"] = indexing.get(mod["slug"])
+			if "disabled" in mod["index"]["filename"]:
+				print(f"mod '{mod["slug"]}' is diabled, skipping")
+				mods.remove(mod)
 			if isinstance(mod["api_data"]["versions"], str):
 				print(f"No suitable version found for mod '{mod['slug']}'")
 				mods.remove(mod)
@@ -44,7 +53,7 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 	for mod in mods:
 		for dependency in mod["api_data"]["versions"][0]["dependencies"]:
 			if dependency["project_id"] not in checkeddependencies:
-				dep_api_data = modrinth.getAPI(dependency["project_id"], depcheck=True)
+				dep_api_data = sources[mod["source"]].getAPI(dependency["project_id"], depcheck=True)
 				reasons[dep_api_data["slug"]] = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
 				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({"required" if reasons[dep_api_data["slug"]] == "dependency" else reasons[dep_api_data["slug"]]})")
 				checkeddependencies.append(dependency["project_id"])
@@ -72,10 +81,9 @@ def addMod(slugs = None, checkeddependencies=[], reasons={}, fromdep=False):
 			commons.instancecfg["translation-layer"] = "sinytra"
 			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
 				toml.dump(commons.instancecfg, f)
-		modrinth.getMod(mod["slug"], mod["api_data"], mod["index"])
+		sources[mod["source"]].getMod(mod["slug"], mod["api_data"], mod["index"])
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod['slug'], mod['api_data']['versions'][0]['files'][0]['size'])
-		indexing.mcmm(mod['slug'], mod['api_data'], mod['index']['reason'])
-		cache.setModCache(mod['api_data']['versions'][0]['files'][0]['filename'], mod["api_data"]["versions"][0]["folder"])
+		indexing.mcmm(mod['slug'], mod['api_data'], mod['index']['reason'], mod["source"])
 
 def removeMod(slugs=None, fromadd=False):
 	if slugs is None:
@@ -104,7 +112,6 @@ def removeMod(slugs=None, fromadd=False):
 			commons.instancecfg["translation-layer"] = "None"
 			with open(f"{commons.instance_dir}/mcmodman_managed.toml", "w", encoding="utf-8") as f:
 				toml.dump(commons.instancecfg, f)
-		print(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
 		os.remove(f"{commons.instance_dir}/.content/{mod['slug']}.mm.toml")
 		os.remove(os.path.join(mod["index"]["folder"], mod["index"]["filename"]))
 		logger.info("Removed content '%s'", {mod['slug']})
@@ -119,7 +126,7 @@ def confirm(mods, changetype):
 	totalnewsize = sum(mod["api_data"]["versions"][0]["files"][0]["size"] for mod in mods) if changetype == "download" else 0
 
 	for mod in mods:
-		print(f"Mod {mod['slug']} {mod['index']['version']} --> {mod['api_data']['versions'][0]['version_number'] if changetype == 'download' else None}")
+		print(f"Mod {mod["source"]}/{mod['slug']} {mod['index']['version']} --> {mod['api_data']['versions'][0]['version_number'] if changetype == 'download' else None}")
 	print(f"\nTotal {changetype} size: {convertBytes(totalnewsize if changetype == 'download' else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
 	yn = input("\n:: Proceed with download? [Y/n]: ")
@@ -174,6 +181,8 @@ def toggleMod():
 			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}")
 			print(f"Mod '{slug}' has been enabled")
 			logger.info("Moved content '%s' from %s.disabled to %s", slug, index['filename'], index['filename'])
+		else:
+			raise TargetNotFoundError
 
 def searchMod():
 	query = commons.args["query"]
@@ -240,7 +249,7 @@ def downgradeMod():
 
 		_, folder = modrinth.projectGetType(mod["api_data"])
 		modrinth.getMod(mod['slug'], mod["api_data"], mod["index"])
-		indexing.mcmm(mod['slug'], mod["api_data"], mod["index"]["reason"])
+		indexing.mcmm(mod['slug'], mod["api_data"], mod["index"]["reason"], "modrinth")
 		cache.setModCache(mod['api_data']['versions'][0]['files'][0]['filename'], folder)
 		print(f"Mod '{mod['slug']}' successfully updated")
 
@@ -278,7 +287,11 @@ if __name__ == "__main__":
 			with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
 				logger.info("Setting lock")
 
+		sources = {"local": local, "modrinth": modrinth}
+
 		main()
+	except local.zipfile.BadZipFile:
+		print("bad")
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
 		logger.info("Process interrupted by user")
@@ -293,13 +306,13 @@ if __name__ == "__main__":
 		print("An error occurred while running mcmodman")
 		logger.critical(e)
 		raise
-	#except Exception as e:
-	#	print("An unexpected error occured", e)
-	#	logger.critical(e)
-	#	raise
+	except Exception as e:
+		print("An unexpected error occured", e)
+		logger.critical(e)
+		raise
 	finally:
 		if commons.args["lock"] and os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock"))):
 			logger.info("Removing lock")
 			os.remove(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock")))
 		logger.info("Exiting")
-		raise SystemExit
+		#raise SystemExit

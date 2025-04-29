@@ -46,6 +46,8 @@ def getMod(slug, mod_data, index):
 			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
 			raise ChecksumError
 
+	cache.setModCache(mod_data['versions'][0]['files'][0]['filename'], mod_data["versions"][0]["folder"])
+
 def parseAPI(api_data):
 	ptype, folder = projectGetType(api_data)
 	if ptype == "modpack":
@@ -88,7 +90,7 @@ def getAPI(slug, depcheck=False):
 
 	if "modData" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
-		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='', flush=True)
+		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='')
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		if response.status_code != 200:
