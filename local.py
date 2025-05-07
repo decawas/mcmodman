@@ -7,18 +7,18 @@ def getMod(slug, modData, index):
 def parseAPI(modData):
 	modData["versions"] = [""]
 	modData["versions"][0] = {"slug": os.path.basename(modData["filename"]), "dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
-	if modData.get("type") in ["shaderpack", "datapack", "resourcepack"]:
+	if modData["from"] == "pack.mcmeta":
 		modData["versions"][0]["id"] = "Unknown"
 		modData["versions"][0]["version_number"] = "Unknown"
-	if modData.get("modLoader") == "javafml":
+	if modData["from"] == "mods.toml":
 		modData["versions"][0]["id"] = modData["mods"][0]["version"]
 		modData["versions"][0]["version_number"] = modData["mods"][0]["version"]
 		modData["versions"][0]["slug"] = modData["mods"][0]["modId"]
-	elif modData.get("main") is None:
+	elif modData["from"] == "fabric.mod.json":
 		modData["versions"][0]["id"] = modData["version"]
 		modData["versions"][0]["version_number"] = modData["version"]
 		modData["versions"][0]["slug"] = modData["id"]
-	elif modData.get("main") is not None:
+	elif modData["from"] == "plugin.yml":
 		modData["versions"][0]["id"] = modData["version"]
 		modData["versions"][0]["version_number"] = modData["version"]
 		modData["versions"][0]["slug"] = modData["name"]
@@ -32,28 +32,34 @@ def getAPI(filename):
 			with mod.open('fabric.mod.json') as data:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "mod"
+			modData["from"] = "fabric.mod.json"
 		elif "META-INF/mods.toml" in moddir:
 			with mod.open('META-INF/mods.toml') as data:
 				modData = toml.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "mod"
+			modData["from"] = "mods.toml"
 		elif "plugin.yml" in moddir:
 			with mod.open('plugin.yml') as data:
 				modData = yaml.load(data.read().decode("utf-8"), yaml.CSafeLoader)
 			modData["project_type"] = "plugin"
+			modData["from"] = "plugin.yml"
 		elif "assets/" in moddir and "pack.mcmeta" in moddir:
 			with mod.open('pack.mcmeta') as data:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "resourcepack"
+			modData["from"] = "pack.mcmeta"
 		elif "data/" in moddir and "pack.mcmeta" in moddir:
 			with mod.open('pack.mcmeta') as data:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "datapack"
+			modData["from"] = "pack.mcmeta"
 		elif "shaders/" in moddir:
-			modData = {"project_type": "shaderpack"}
+			modData = {"project_type": "shaderpack", "from": "pack.mcmeta"}
 		else:
 			print("unknown mod format")
 			raise Exception
 	
 	modData["id"] = os.path.basename(filename)
 	modData["filename"] = filename
+	modData["source"] = "local"
 	return modData

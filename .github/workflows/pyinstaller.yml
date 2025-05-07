@@ -35,7 +35,7 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       - run: pip install -U pyinstaller appdirs toml requests pyyaml
-      - run: pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py local.py instance.py cache.py --add-data=dataversion.json:dataversion.json --add-data=config-template.toml:config-template.toml
+      - run: pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py local.py hangar.py instance.py cache.py --add-data=dataversion.json:dataversion.json --add-data=config-template.toml:config-template.toml
       - run: tar czfC dist/mcmodman_macos_aarch64.tar.gz dist mcmodman
       - uses: actions/upload-artifact@v4
         with:

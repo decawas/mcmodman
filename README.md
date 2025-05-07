@@ -68,7 +68,7 @@
 ## Build
 simply run 
 ```
-pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py
+pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py hangar.py local.py instance.py cache.py --add-data=dataversion.json:dataversion.json --add-data=config-template.toml:config-template.toml
 ```
 requires python and pyinstaller to be installed, the 'appdirs' and 'toml' modules are dependencies
 

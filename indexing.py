@@ -9,16 +9,7 @@ def mcmm(slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
-	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data["id"], 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["project_type"], "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
-	if source != "local":
-		index["mode"] = "url"
-		index["url"] = mod_data['versions'][0]["files"][0]["url"]
-		index["hash"] = mod_data['versions'][0]['files'][0]['hashes']['sha512']
-		index["format"] = "sha512"
-	if source == "local" or commons.instancecfg["loader"] in mod_data["loaders"]:
-		pass
-	elif "datapack" in mod_data["loaders"]:
-		index["type"] = "datapack"
+	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("project_id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["type"], "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
 
 	with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), 'w',  encoding='utf-8') as f:
 		toml.dump(index, f)

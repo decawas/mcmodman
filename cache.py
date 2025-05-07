@@ -6,44 +6,43 @@ from shutil import copyfile
 from time import time
 import logging, os, toml, commons
 
-APICACHEVERSION = 2
+APICACHEVERSION = 3
 
-def isAPICached(filename):
+def isAPICached(filename: str, source: str):
 	filename = filename.split(".")[0]
-	path = os.path.join(commons.cacheDir, "modrinth-api", f"{filename}.{'modrinthquery' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
+	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")	
 	if not os.path.exists(path):
 		return False
 	cacheData = toml.load(path)
 	return time() - cacheData["time"] <= commons.config["api-expire"] and cacheData["api-cache-version"] == APICACHEVERSION
 
+def isModCached(slug: str, loader: str, mod_version: str, game_version: str):
+	return os.path.exists(os.path.join(commons.cacheDir, "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
 
-def isModCached(f):
-	return os.path.exists(os.path.join(commons.cacheDir, "mods", f))
-
-def getAPICache(slug):
-	if not isAPICached(slug):
+def getAPICache(slug: str, source: str):
+	if not isAPICached(slug, source):
 		return False
-	return toml.load(os.path.join(commons.cacheDir, "modrinth-api", f"{slug}.{'modrinthquery' if commons.args['operation'] == 'search' else 'mmcache'}.toml"))["query-api" if commons.args['operation'] == 'search' else "mod-api"]
+	return toml.load(os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml"))["api"]
 
-def getModCache(filename, folder):
-	if not isModCached(filename):
+def getModCache(slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
+	if not isModCached(slug, loader, mod_version, game_version):
 		return False
-	copyfile(os.path.join(commons.cacheDir, "mods", filename), os.path.join(commons.instance_dir, folder, filename))
+	copyfile(os.path.join(commons.cacheDir, "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"), os.path.join(commons.instance_dir, folder, filename))
 	return True
 
-def setAPICache(slug, apiData):
-	path = os.path.join(commons.cacheDir, "modrinth-api", f"{slug}.{'modrinthquery' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
-	cacheData = {"time": time(), "api-cache-version": APICACHEVERSION, "mod-api": apiData}
+def setAPICache(slug: str, apiData: dict, source: str):
+	path = os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
+	cacheData = {"time": time(), "api-cache-version": APICACHEVERSION, "api": apiData}
 	logger.info(f"Caching data for {'query' if commons.args['operation'] == 'search' else 'mod'} '%s' to %s", slug, path)
 	if slug in commons.args["query" if commons.args['operation'] == "search" else "slugs"]:
 		print(f"Caching data for {'query' if commons.args['operation'] == 'search' else 'mod'} '{slug}'")
 	with open(path, "w", encoding="utf-8") as f:
 		toml.dump(cacheData, f)
 
-def setModCache(filename, folder):
-	if isModCached(filename):
+def setModCache(slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
+	if isModCached(slug, loader, mod_version, game_version):
 		return
-	copyfile(os.path.join(commons.instance_dir, folder, filename), os.path.join(commons.cacheDir, "mods", filename))
+	copyfile(os.path.join(commons.instance_dir, folder, filename), os.path.join(commons.cacheDir, "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
 
 def clearCache():
 	if not os.listdir(os.path.join(commons.cacheDir, "modrinth-api")):

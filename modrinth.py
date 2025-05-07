@@ -4,13 +4,16 @@ modrinth api functions
 from hashlib import sha512
 from shutil import copyfile
 import logging, os
-from requests import get
+from requests import get, RequestException
 import toml, cache, commons
 
-def getMod(slug, mod_data, index):
-	if cache.isModCached(os.path.join(mod_data['versions'][0]['files'][0]['filename'])):
+if not os.path.exists(os.path.join(commons.cacheDir, "modrinth-api")):
+	os.makedirs(os.path.join(commons.cacheDir, "modrinth-api"))
+
+def getMod(slug: str, mod_data: dict) -> None:
+	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version):
 		print(f"Using cached version for mod '{slug}'")
-		copyfile(os.path.join(commons.cacheDir, "mods", mod_data['versions'][0]['files'][0]['filename']), os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
+		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 		return
 
 	print(f"Downloading mod '{slug}'")
@@ -21,13 +24,7 @@ def getMod(slug, mod_data, index):
 		logger.error('Modrinth download returned %s', response.status_code)
 		return
 
-	_, folder = projectGetType(mod_data)
-	if folder == "":
-		with open("server.properties", "r", encoding="utf-8") as f:
-			properties = toml.loads(f.read())
-		folder = os.path.join(properties["level-name"], "datapacks")
-
-	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]["files"][0]["filename"]), "wb") as f:
+	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), "wb") as f:
 		f.write(response.content)
 
 	if commons.config["checksum"] in ["Always", "Download"]:
@@ -39,16 +36,16 @@ def getMod(slug, mod_data, index):
 
 	if perfcheck:
 		print("Checking hash")
-		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']), 'rb') as f:
+		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()
 		if mod_data["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
 			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
 			raise ChecksumError
 
-	cache.setModCache(mod_data['versions'][0]['files'][0]['filename'], mod_data["versions"][0]["folder"])
+	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data["versions"][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 
-def parseAPI(api_data):
+def parseAPI(api_data: dict) -> list:
 	ptype, folder = projectGetType(api_data)
 	if ptype == "modpack":
 		print(f"{api_data['slug']} is a modpack")
@@ -67,24 +64,26 @@ def parseAPI(api_data):
 
 	matches = {"release": [], "beta": [], "alpha": [], "translation": []}
 	for version in api_data["versions"]:
+		version["source"] = "modrinth"
+		version["date"] = version["date_published"]
+		version["type"] = ptype
 		if commons.minecraft_version in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = folder
 			matches[version["version_type"]].append(version)
-		if commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "plugins"
 			matches["translation"].append(version)
-		if commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matches["translation"].append(version)
 	matches = matches["release"] + matches["beta"] + matches["alpha"] + matches["translation"]
 	if not matches:
-		#print(f"No matching versions found for mod '{api_data['slug']}'")
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
 	return matches
 
-def getAPI(slug, depcheck=False):
-	cacheData = cache.getAPICache(slug)
+def getAPI(slug: str, depcheck: bool = False) -> dict:
+	cacheData = cache.getAPICache(slug, "modrinth")
 	if cacheData:
 		modData = cacheData
 
@@ -92,36 +91,46 @@ def getAPI(slug, depcheck=False):
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
 		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='')
 		url = f"https://api.modrinth.com/v2/project/{slug}"
-		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		if response.status_code != 200:
-			print(f"Mod '{slug}' not found")
-			raise SystemExit
-		modData = response.json()
-		url = f"https://api.modrinth.com/v2/project/{slug}/version"
-		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		response.raise_for_status()
-		modData["versions"] = response.json()
+		try:
+			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+			if response.status_code != 200:
+				print(f"Mod '{slug}' not found")
+				raise SystemExit
+			modData = response.json()
+			url = f"https://api.modrinth.com/v2/project/{slug}/version"
+			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+			response.raise_for_status()
+			modData["versions"] = response.json()
 
-		cache.setAPICache(slug, modData)
-		if slug != modData['slug']:
-			cache.setAPICache(modData['slug'], modData)
+			cache.setAPICache(slug, modData, "modrinth")
+			if slug != modData['slug']:
+				cache.setAPICache(modData['slug'], modData, "modrinth")
+		except RequestException:
+			modData = {"versions": []}
 
+	modData["source"] = "modrinth"
 	return modData
 
-def searchAPI(query):
-	cacheData = cache.getAPICache(query)
+def searchAPI(query: str) -> dict:
+	cacheData = cache.getAPICache(query, "modrinth")
 	if cacheData:
 		queryData = cacheData
 
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying modrinth with query '{query}'")
-		url = f"https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}&facets=[[\"project_types!=modpack\"],[\"versions:{commons.minecraft_version}\"],[\"categories:{commons.mod_loader}\"]]"
-		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		response.raise_for_status()
-		queryData = response.json()
+		url = f"https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}&facets=[[\"project_types!=modpack\"]]"
+		try:
+			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
+			response.raise_for_status()
+			queryData = response.json()
 
-		cache.setAPICache(query, queryData)
+			cache.setAPICache(query, queryData, "modrinth")
+		except RequestException:
+			queryData = {"hits": []}
+	
+	for hit in queryData["hits"]:
+		hit["source"] = "modrinth" 
 
 	return queryData
 

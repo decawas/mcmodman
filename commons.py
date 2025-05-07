@@ -99,7 +99,6 @@ if "--instance" not in argv:
 	if not os.path.exists(cacheDir):
 		os.makedirs(cacheDir)
 		os.makedirs(os.path.join(cacheDir, "mods"))
-		os.makedirs(os.path.join(cacheDir, "modrinth-api"))
 
 	selected_instance = config["selected-instance"]
 	if selected_instance in instances.keys():
