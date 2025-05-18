@@ -16,11 +16,8 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 	if not slugs:
 		raise NoTargetsError
 	slugs = list(set(slugs))
-	mods = [{'slug': slug} for slug in slugs]
+	mods = [{'slug': slug} for slug in slugs if slug not in commons.config["ignored-mods"]]
 	for mod in reversed(mods):
-		if mod["slug"] in commons.config["ignored-mods"]:
-			print(f"Mod '{mod["slug"]}' in ignored-mods, skipping")
-			mods.remove(mod)
 		if mod["slug"] not in reasons and mod["slug"] in commons.args["slugs"]:
 			reasons[mod["slug"]] = "explicit"
 		mod["source"] = "local" if any(ext in mod["slug"] for ext in (".jar", ".zip")) else "sourceagnostic"
@@ -44,7 +41,7 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 			mod["slug"] = mod["api_data"]["versions"][0]["slug"]
 			mod["index"] = indexing.get(mod["slug"])
 		if "disabled" in mod["index"]["filename"]:
-			print(f"mod '{mod["slug"]}' is disabled, skipping")
+			print(f"mod '{mod['slug']}' is disabled, skipping")
 			mods.remove(mod)
 			continue
 		if isinstance(mod["api_data"]["versions"], str):
@@ -105,7 +102,7 @@ def removeMod(slugs=None, fromadd=False):
 			logger.error("Could not load index '%s' because it is not installed", {mod["slug"]})
 			raise TargetNotFoundError(mod["slug"])
 		if mod["slug"] in commons.config["ignored-mods"]:
-			commons.config["ignored-mods"].remove(mod)
+			commons.config["ignored-mods"].remove(mod["slug"])
 		mod["source"] = mod["index"]["source"]
 
 	if not mods:
@@ -336,7 +333,15 @@ class sourceagnostic:
 			for i, source in enumerate(reversed(apiData)):
 				print(f"  {len(apiData) - i - 1})\t{source}/{slug}")
 			choice = input("\n:: Choose source: ")
-			return list(apiData.values())[int(choice)]
+			try:
+				choice = int(choice)
+			except ValueError as exc:
+				print("Invalid choice")
+				raise InvalidChoice(f"Invalid choice, could not cast '{choice}' to int") from exc
+			if choice >= len(apiData):
+				print("Invalid choice")
+				raise InvalidChoice(f"Invalid choice, '{choice}' larger than '{len(apiData)}', list index out of range")
+			return list(apiData.values())[choice]
 		else:
 			for s in apiData:
 				if isinstance(apiData[s], dict):
@@ -345,13 +350,14 @@ class sourceagnostic:
 if __name__ == "__main__":
 	try:
 		if commons.args["lock"]:
-			if os.path.exists(f"{commons.instance_dir}/mcmodman.lock"):
+			try:
+				fd = os.open(os.path.join(commons.instance_dir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+				with os.fdopen(fd, 'w', encoding='utf-8') as f:
+					logger.info("Setting lock")
+			except FileExistsError:
 				print("mcmodman is already running for this instance")
 				logger.info("mcmodman.lock file already exists, exiting")
 				raise LockExistsError("mcmodman is already running for this instance")
-
-			with open(f"{commons.instance_dir}/mcmodman.lock", "w", encoding="utf-8"):
-				logger.info("Setting lock")
 
 		sources = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
@@ -381,11 +387,9 @@ if __name__ == "__main__":
 	except RuntimeError as e:
 		print("An error occurred while running mcmodman")
 		logger.critical(e)
-		raise
 	except Exception as e:
 		print("An unexpected error occured", e)
 		logger.critical(e)
-		raise
 	finally:
 		if commons.args["lock"] and os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock"))):
 			logger.info("Removing lock")

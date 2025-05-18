@@ -34,7 +34,6 @@ def parse_args():
 		print("error: no operation specified")
 		logger.critical("no operation")
 		raise SystemExit
-	print(f"Arguments: {args}")
 	result = {}
 	if args.sync is not None:
 		result["operation"] = "sync"

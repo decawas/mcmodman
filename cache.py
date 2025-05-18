@@ -10,7 +10,7 @@ APICACHEVERSION = 3
 
 def isAPICached(filename: str, source: str):
 	filename = filename.split(".")[0]
-	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")	
+	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
 	if not os.path.exists(path):
 		return False
 	cacheData = toml.load(path)

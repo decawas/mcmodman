@@ -2,7 +2,6 @@
 modrinth api functions
 """
 from hashlib import sha512
-from shutil import copyfile
 import logging, os
 from requests import get, RequestException
 import toml, cache, commons
@@ -22,7 +21,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 	logger.info('Modrinth returned headers %s', response.headers)
 	if response.status_code != 200:
 		logger.error('Modrinth download returned %s', response.status_code)
-		return
+		raise RuntimeError(f"Failed to download mod: HTTP {response.status_code}")
 
 	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), "wb") as f:
 		f.write(response.content)
@@ -32,7 +31,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 	elif commons.config["checksum"] == "Never":
 		perfcheck = False
 	else:
-		perfcheck = True	
+		perfcheck = True
 
 	if perfcheck:
 		print("Checking hash")
@@ -128,9 +127,9 @@ def searchAPI(query: str) -> dict:
 			cache.setAPICache(query, queryData, "modrinth")
 		except RequestException:
 			queryData = {"hits": []}
-	
+
 	for hit in queryData["hits"]:
-		hit["source"] = "modrinth" 
+		hit["source"] = "modrinth"
 
 	return queryData
 

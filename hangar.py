@@ -1,11 +1,10 @@
 """
 hangar api functions
 """
-from hashlib import sha512
-from shutil import copyfile
+from hashlib import sha256
 import logging, os
-from requests import get, RequestException
-import toml, cache, commons
+from requests import get
+import cache, commons
 
 if not os.path.exists(os.path.join(commons.cacheDir, "hangar-api")):
 	os.makedirs(os.path.join(commons.cacheDir, "hangar-api"))
@@ -22,7 +21,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 	logger.info('Hangar returned headers %s', response.headers)
 	if response.status_code != 200:
 		logger.error('Hangar download returned %s', response.status_code)
-		return
+		raise RuntimeError(f"Failed to download plugin: HTTP {response.status_code}")
 
 	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), "wb") as f:
 		f.write(response.content)
@@ -32,12 +31,12 @@ def getMod(slug: str, mod_data: dict) -> None:
 	elif commons.config["checksum"] == "Never":
 		perfcheck = False
 	else:
-		perfcheck = True	
+		perfcheck = True
 
 	if perfcheck and mod_data['versions'][0]['files'][0].get("hashes"):
 		print("Checking hash")
 		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), 'rb') as f:
-			checksum = sha512(f.read()).hexdigest()
+			checksum = sha256(f.read()).hexdigest()
 		if mod_data['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
 			print("Failed to validate file")
 			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']))
@@ -70,9 +69,9 @@ def getAPI(slug: str, depcheck: bool = False) -> dict:
 	cacheData = cache.getAPICache(slug, "hangar")
 	if cacheData:
 		modData = cacheData
-	
+
 	if "modData" not in locals():
-		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
+		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from hangar", slug, slug)
 		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='')
 
 		url = f"https://hangar.papermc.io/api/v1/projects/{slug}"
