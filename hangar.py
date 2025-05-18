@@ -34,7 +34,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 	else:
 		perfcheck = True	
 
-	if perfcheck and mod_data['versions'][0]['files'][0]['hashes']['sha256']:
+	if perfcheck and mod_data['versions'][0]['files'][0].get("hashes"):
 		print("Checking hash")
 		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()

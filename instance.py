@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 def instanceFirstrun(instance_dir):
 	"""Initialize a new instance with the necessary configuration."""
 	managefile = {}
-	if os.path.exists(os.path.expanduser(f"{instance_dir}/logs/latest.log")):
-		with open(os.path.expanduser(f"{instance_dir}/logs/latest.log"), "r", encoding="utf-8") as f:
+	if not any(os.path.exists(os.expanduser(os.path.join(instance_dir, "options.txt"))), os.path.exists(os.expanduser(os.path.join(instance_dir, "server.properties"))), os.path.exists(os.expanduser(os.path.join(instance_dir, "level.dat")))):
+		print("error: selected instance does not appear to be a minecraft instance")
+		raise SystemExit
+	if os.path.exists(os.expanduser(os.path.join(instance_dir, "logs", "latest.log"))):
+		with open(os.path.expanduser(os.path.join(instance_dir, "logs", "latest.log")), "r", encoding="utf-8") as f:
 			log = f.read()
 		loaders = []
 		loader_detector = {

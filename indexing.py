@@ -9,7 +9,7 @@ def mcmm(slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
 		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
 	print(f"Indexing mod '{slug}'")
-	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("project_id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data["type"], "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
+	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("project_id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data['versions'][0].get("type", ""), "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
 
 	with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), 'w',  encoding='utf-8') as f:
 		toml.dump(index, f)
