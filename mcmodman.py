@@ -22,6 +22,8 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 			reasons[mod["slug"]] = "explicit"
 		mod["source"] = "local" if any(ext in mod["slug"] for ext in (".jar", ".zip")) else "sourceagnostic"
 		mod["index"] = indexing.get(mod["slug"], reason=reasons[mod["slug"]])
+		if mod["index"] is None:
+			raise TargetNotFoundError(mod["slug"])
 		if mod["index"].get("source") is not None:
 			mod["source"] = mod["index"]["source"]
 
@@ -62,7 +64,7 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 				reasons[dep_api_data["slug"]] = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
 				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({"required" if reasons[dep_api_data["slug"]] == "dependency" else reasons[dep_api_data["slug"]]})")
 				checkeddependencies.append(dependency["project_id"])
-				if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"]:
+				if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"] or commons.args["optional"]:
 					depslugs.append(dep_api_data["slug"])
 
 	if depslugs and not commons.args["all"] and not commons.args["explicit"]:
@@ -175,8 +177,12 @@ def queryMod(slugs=None):
 
 def toggleMod():
 	slugs = commons.args["slugs"]
+	if not slugs:
+		raise NoTargetsError
 	for slug in slugs:
 		index = indexing.get(slug)
+		if index is None:
+			raise TargetNotFoundError(slug)
 		if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index["filename"])):
 			os.rename(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], index['filename']), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled"))
 			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}.disabled")
@@ -187,8 +193,6 @@ def toggleMod():
 			index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{index['filename']}")
 			print(f"Mod '{slug}' has been enabled")
 			logger.info("Moved content '%s' from %s.disabled to %s", slug, index['filename'], index['filename'])
-		else:
-			raise TargetNotFoundError
 
 def searchMod():
 	query = commons.args["query"]
@@ -362,7 +366,6 @@ if __name__ == "__main__":
 
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda: print(commons.__version__)}
-
 		operations[commons.args["operation"]]()
 	except local.zipfile.BadZipFile:
 		print("bad")
@@ -394,4 +397,3 @@ if __name__ == "__main__":
 			logger.info("Removing lock")
 			os.remove(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock")))
 		logger.info("Exiting")
-		#raise SystemExit

@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 def parse_args():
 	parser = argparse.ArgumentParser(description="mcmodman command line interface")
 	group = parser.add_mutually_exclusive_group(required=True)
-	group.add_argument("-S", "--sync", nargs="*", metavar="SLUG", help="Sync mods")
-	group.add_argument("-U", "--upgrade", nargs="*", metavar="SLUG", help="Upgrade mods")
-	group.add_argument("-R", "--remove", nargs="*", metavar="SLUG", help="Remove mods")
-	group.add_argument("-T", "--toggle", nargs="*", metavar="SLUG", help="Toggle mods")
-	group.add_argument("-Q", "--query", nargs="*", metavar="SLUG", help="Query mods")
-	group.add_argument("-D", "--downgrade", nargs="*", metavar="SLUG", help="Downgrade mods")
-	group.add_argument("--ignore", nargs="*", metavar="SLUG", help="Ignore mods")
-	group.add_argument("-F", "--search", nargs=argparse.REMAINDER, metavar="QUERY", help="Search mods")
+	group.add_argument("-S", "--sync", action="store_true", help="Sync mods")
+	group.add_argument("-U", "--upgrade", action="store_true", help="Upgrade mods")
+	group.add_argument("-R", "--remove", action="store_true", help="Remove mods")
+	group.add_argument("-T", "--toggle", action="store_true", help="Toggle mods")
+	group.add_argument("-Q", "--query", action="store_true", help="Query mods")
+	group.add_argument("-D", "--downgrade", action="store_true", help="Downgrade mods")
+	group.add_argument("--ignore", action="store_true", help="Ignore mods")
+	group.add_argument("-F", "--search", action="store_true", help="Search mods")
 	group.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
 	group.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
 	group.add_argument("--version", action="store_true")
@@ -28,6 +28,7 @@ def parse_args():
 	parser.add_argument("-d", "--dependency", action="store_true", help="Dependency")
 	parser.add_argument("-p", "--optional", action="store_true", help="Optional")
 	parser.add_argument("-y", "--noconfirm", action="store_true", help="Skip the confirmation dialogue, does not skip the ignore question in downgrade")
+	parser.add_argument("slugs", nargs="*", help="Mod slugs to operate on")
 
 	try:
 		args = parser.parse_args()
@@ -36,36 +37,36 @@ def parse_args():
 		logger.critical("no operation")
 		raise SystemExit
 	result = {}
-	if args.sync is not None:
+	if args.sync:
 		result["operation"] = "sync"
-		result["slugs"] = args.sync
-	elif args.upgrade is not None:
+		result["slugs"] = args.slugs
+	elif args.upgrade:
 		result["operation"] = "upgrade"
-		result["slugs"] = args.upgrade
-	elif args.remove is not None:
+		result["slugs"] = args.slugs
+	elif args.remove:
 		result["operation"] = "remove"
-		result["slugs"] = args.remove
-	elif args.toggle is not None:
+		result["slugs"] = args.slugs
+	elif args.toggle:
 		result["operation"] = "toggle"
-		result["slugs"] = args.toggle
-	elif args.query is not None:
+		result["slugs"] = args.slugs
+	elif args.query:
 		result["operation"] = "query"
-		result["slugs"] = args.query
-	elif args.downgrade is not None:
+		result["slugs"] = args.slugs
+	elif args.downgrade:
 		result["operation"] = "downgrade"
-		result["slugs"] = args.downgrade
-	elif args.ignore is not None:
+		result["slugs"] = args.slugs
+	elif args.ignore:
 		result["operation"] = "ignore"
-		result["slugs"] = args.ignore
-	elif args.search is not None:
+		result["slugs"] = args.slugs
+	elif args.search:
 		result["operation"] = "search"
-		result["query"] = " ".join(args.search)
-	elif args.version is not None:
+		result["query"] = " ".join(args.slugs)
+	elif args.version:
 		result["operation"] = "version"
-	elif args.cc is not None:
+	elif args.cc:
 		result["operation"] = "clear-cache"
 		result["suboperation"] = args.cc or ""
-	elif args.instance is not None:
+	elif args.instance:
 		result["operation"] = "instance"
 		result["suboperation"] = args.instance[0]
 		result["name"] = args.instance[1] if len(args.instance) > 1 else None
@@ -77,7 +78,6 @@ def parse_args():
 	result["optional"] = args.optional
 	result["noconfirm"] = args.noconfirm
 	result["lock"] = result.get("operation") in ["sync", "update", "remove", "toggle", "downgrade"]
-
 	return result
 
 class InvalidOption(Exception):

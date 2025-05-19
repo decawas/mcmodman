@@ -1,10 +1,13 @@
-from shutil import copyfile
+from shutil import copyfile, SameFileError
 import logging, os, json, yaml, zipfile, toml, commons
 
-def getMod(slug, modData, index):
-	copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
+def getMod(slug: str, modData: dict):
+	try:
+		copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
+	except SameFileError:
+		pass
 
-def parseAPI(modData):
+def parseAPI(modData: dict) -> list:
 	modData["versions"] = [""]
 	modData["versions"][0] = {"slug": os.path.basename(modData["filename"]), "dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
 	if modData["from"] == "pack.mcmeta":
@@ -22,10 +25,10 @@ def parseAPI(modData):
 		modData["versions"][0]["id"] = modData["version"]
 		modData["versions"][0]["version_number"] = modData["version"]
 		modData["versions"][0]["slug"] = modData["name"]
-	
+
 	return modData["versions"]
 
-def getAPI(filename):
+def getAPI(filename: str) -> dict:
 	with zipfile.ZipFile(filename, "r") as mod:
 		moddir = mod.namelist()
 		if "fabric.mod.json" in moddir:
@@ -57,8 +60,8 @@ def getAPI(filename):
 			modData = {"project_type": "shaderpack", "from": "pack.mcmeta"}
 		else:
 			print("unknown mod format")
-			raise Exception
-	
+			raise ValueError
+
 	modData["id"] = os.path.basename(filename)
 	modData["filename"] = filename
 	modData["source"] = "local"
