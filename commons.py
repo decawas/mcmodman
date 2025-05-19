@@ -5,7 +5,7 @@ import argparse
 import logging, os, appdirs, toml
 from instance import instanceFirstrun
 
-__version__ = "25.3+"
+__version__ = "25.21"
 logger = logging.getLogger(__name__)
 
 def parse_args():
@@ -19,8 +19,9 @@ def parse_args():
 	group.add_argument("-D", "--downgrade", nargs="*", metavar="SLUG", help="Downgrade mods")
 	group.add_argument("--ignore", nargs="*", metavar="SLUG", help="Ignore mods")
 	group.add_argument("-F", "--search", nargs=argparse.REMAINDER, metavar="QUERY", help="Search mods")
-	group.add_argument("--cc", nargs=2, metavar=("SUBOPERATION", "NAME"), help="Clear cache")
+	group.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
 	group.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
+	group.add_argument("--version", action="store_true")
 
 	parser.add_argument("-a", "--all", action="store_true", help="Apply to all")
 	parser.add_argument("-e", "--explicit", action="store_true", help="Explicit")
@@ -59,11 +60,11 @@ def parse_args():
 	elif args.search is not None:
 		result["operation"] = "search"
 		result["query"] = " ".join(args.search)
+	elif args.version is not None:
+		result["operation"] = "version"
 	elif args.cc is not None:
 		result["operation"] = "clear-cache"
-		result["suboperation"] = args.cc[0]
-		result["name"] = args.cc[1] if len(args.cc) > 1 else None
-		result["path"] = None
+		result["suboperation"] = args.cc or ""
 	elif args.instance is not None:
 		result["operation"] = "instance"
 		result["suboperation"] = args.instance[0]

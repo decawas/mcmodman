@@ -29,7 +29,7 @@ def getModCache(slug: str, loader: str, mod_version: str, game_version: str, fol
 		return False
 	copyfile(os.path.join(commons.cacheDir, "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"), os.path.join(commons.instance_dir, folder, filename))
 	return True
-
+ 
 def setAPICache(slug: str, apiData: dict, source: str):
 	path = os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
 	cacheData = {"time": time(), "api-cache-version": APICACHEVERSION, "api": apiData}
@@ -45,44 +45,46 @@ def setModCache(slug: str, loader: str, mod_version: str, game_version: str, fol
 	copyfile(os.path.join(commons.instance_dir, folder, filename), os.path.join(commons.cacheDir, "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
 
 def clearCache():
-	if not os.listdir(os.path.join(commons.cacheDir, "modrinth-api")):
-		return
-	for file in os.listdir(os.path.join(commons.cacheDir, "modrinth-api")):
-		cacheData = toml.load(os.path.join(commons.cacheDir, "modrinth-api", file))
-		if time() - cacheData["time"] > commons.config["api-expire"] or cacheData["api-cache-verison"] != APICACHEVERSION:
-			os.remove(os.path.join(os.path.join(commons.cacheDir, "modrinth-api")))
-			logger.info("Deleted cache for %s because it has expired", file.split('.')[0])
-			print(f"Deleted api cache for {file.split('.')[0]} (expired)")
 	if commons.args["suboperation"] in ["api", "all"]:
 		clearAPICache()
 	if commons.args["suboperation"] in ["content", "all"]:
 		clearModCache()
+	if not any([os.listdir(os.path.join(commons.cacheDir, "modrinth-api")), os.listdir(os.path.join(commons.cacheDir, "hangar-api"))]):
+		return
+	for source in ["modrinth", "hangar"]:
+		for file in os.listdir(os.path.join(commons.cacheDir, f"{source}-api")):
+			cacheData = toml.load(os.path.join(commons.cacheDir, f"{source}-api", file))
+			if time() - cacheData["time"] > commons.config["api-expire"] or cacheData.get("api-cache-verison", 0) != APICACHEVERSION:
+				os.remove(os.path.join(commons.cacheDir, f"{source}-api", file))
+				logger.info("Deleted cache for %s because it has expired", file.split('.')[0])
+				print(f"Deleted api cache for {file.split('.')[0]} (expired)")
 	print("Done Clearing Cache")
 
 def clearAPICache():
-	if not os.listdir(os.path.join(commons.cacheDir, "modrinth-api")):
+	if not any([os.listdir(os.path.join(commons.cacheDir, "modrinth-api")), os.listdir(os.path.join(commons.cacheDir, "hangar-api"))]):
 		return
-	if not commons.args["auto-confirm"]:
+	if not commons.args["noconfirm"]:
 		print("Are you sure you want to clear all api cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing all api cache? [Y/n]: ")
 		print("")
 		if yn.lower() != 'y' and yn != '':
 			return
-	for file in os.listdir(os.path.join(commons.cacheDir, "modrinth-api")):
-		os.remove(os.path.join(commons.cacheDir, "modrinth-api", file))
-		print(f"Deleted api cache for {file.split('.')[0]}")
-		logger.info("Deleted api cache for %s (clear all)", file.split('.')[0])
+	for source in ["modrinth", "hangar"]:
+		for file in os.listdir(os.path.join(commons.cacheDir, f"{source}-api")):
+			os.remove(os.path.join(commons.cacheDir, f"{source}-api", file))
+			print(f"Deleted api cache for {file.split('.')[0]}")
+			logger.info("Deleted api cache for %s (clear all)", file.split('.')[0])
 
 def clearModCache():
 	if not os.listdir(os.path.join(commons.cacheDir, "mods")):
 		return
-	if not commons.args["auto-confirm"]:
+	if not commons.args["noconfirm"]:
 		print("Are you sure you want to clear content cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing content cache? [y/N]: ")
 		print("")
 		if yn.lower() != 'y':
 			return
-	for file in os.listdir(f"{commons.cacheDir}/mods"):
+	for file in os.listdir(os.path.join(commons.cacheDir, "mods")):
 		os.remove(os.path.join(commons.cacheDir, commons.instancecfg["modfolder"], file))
 		print(f"Deleted content cache for {file}")
 		logger.info("Deleted content cache for %s (clear content cache)", {file})

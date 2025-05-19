@@ -342,10 +342,9 @@ class sourceagnostic:
 				print("Invalid choice")
 				raise InvalidChoice(f"Invalid choice, '{choice}' larger than '{len(apiData)}', list index out of range")
 			return list(apiData.values())[choice]
-		else:
-			for s in apiData:
-				if isinstance(apiData[s], dict):
-					return apiData[s]
+		for s in apiData:
+			if isinstance(apiData[s], dict):
+				return apiData[s]
 
 if __name__ == "__main__":
 	try:
@@ -362,7 +361,7 @@ if __name__ == "__main__":
 		sources = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
-		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda _: print(commons.__version__)}
+		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda: print(commons.__version__)}
 
 		operations[commons.args["operation"]]()
 	except local.zipfile.BadZipFile:
