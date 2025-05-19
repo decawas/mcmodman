@@ -51,7 +51,7 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 			mods.remove(mod)
 			continue
 		elif mod["api_data"]["versions"][0]["id"] == mod["index"]["version-id"]:
-			print(f"Mod '{mod["slug"]}' already up to date, {'skipping' if commons.args["operation"] == "upgrade" else 'reinstalling'}")
+			print(f"Mod '{mod['slug']}' already up to date, {'skipping' if commons.args['operation'] == 'upgrade' else 'reinstalling'}")
 			if commons.args["operation"] == "upgrade":
 				mods.remove(mod)
 				continue
@@ -62,7 +62,7 @@ def addMod(slugs = None, checkeddependencies=None, reasons=None, fromdep=False):
 			if dependency["project_id"] not in checkeddependencies:
 				dep_api_data = sources[mod["source"]].getAPI(dependency["project_id"], depcheck=True)
 				reasons[dep_api_data["slug"]] = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
-				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({"required" if reasons[dep_api_data["slug"]] == "dependency" else reasons[dep_api_data["slug"]]})")
+				print(f"mod '{mod['slug']}' is dependent on '{dep_api_data['slug']}' ({'required' if reasons[dep_api_data['slug']] == 'dependency' else reasons[dep_api_data['slug']]})")
 				checkeddependencies.append(dependency["project_id"])
 				if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"] or commons.args["optional"]:
 					depslugs.append(dep_api_data["slug"])
@@ -134,7 +134,7 @@ def confirm(mods, changetype):
 	totalnewsize = sum(mod["api_data"]["versions"][0]["files"][0]["size"] for mod in mods) if changetype == "download" else 0
 
 	for mod in mods:
-		print(f"Mod {mod["source"]}/{mod['slug']} {mod['index']['version']} --> {mod['api_data']['versions'][0]['version_number'] if changetype == 'download' else None}")
+		print(f"Mod {mod['source']}/{mod['slug']} {mod['index']['version']} --> {mod['api_data']['versions'][0]['version_number'] if changetype == 'download' else None}")
 	print(f"\nTotal {changetype} size: {convertBytes(totalnewsize if changetype == 'download' else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
 	yn = input("\n:: Proceed with download? [Y/n]: ")
@@ -267,7 +267,7 @@ def downgradeMod():
 
 	toignore = []
 	for mod in mods:
-		ignore = input(f":: add {mod["slug"]} to ignored-packages? [y/N]: ")
+		ignore = input(f":: add {mod['slug']} to ignored-packages? [y/N]: ")
 		if ignore.lower() == "y":
 			toignore.append(mod["slug"])
 		if queryMod([mod["slug"]]):

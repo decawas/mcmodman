@@ -3,13 +3,13 @@ import logging, os, json, yaml, zipfile, toml, commons
 
 def getMod(slug: str, modData: dict):
 	try:
-		copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
+		copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData['project_type']}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
 	except SameFileError:
 		pass
 
 def parseAPI(modData: dict) -> list:
 	modData["versions"] = [""]
-	modData["versions"][0] = {"slug": os.path.basename(modData["filename"]), "dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
+	modData["versions"][0] = {"slug": os.path.basename(modData["filename"]), "dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData['project_type']}s"}
 	if modData["from"] == "pack.mcmeta":
 		modData["versions"][0]["id"] = "Unknown"
 		modData["versions"][0]["version_number"] = "Unknown"

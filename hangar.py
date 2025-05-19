@@ -61,7 +61,7 @@ def parseAPI(apiData: dict) -> list:
 
 	matches = matches["release"] + matches["snapshot"] + matches["alpha"] + matches["translation"]
 	if not matches:
-		logger.error("No matching versions found for mod '%s", apiData['namespace']['slug'])
+		logger.error("No matching versions found for mod '%s'", apiData['namespace']['slug'])
 		return "No version"
 	return matches
 
