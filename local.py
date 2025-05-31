@@ -1,6 +1,8 @@
 from shutil import copyfile, SameFileError
 import logging, os, json, yaml, zipfile, toml, commons
 
+TAGS = []
+
 def getMod(slug: str, modData: dict):
 	try:
 		copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))

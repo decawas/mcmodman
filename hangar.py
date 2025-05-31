@@ -6,6 +6,8 @@ import logging, os
 from requests import get
 import cache, commons
 
+TAGS = ["SEARCH", "EXTERNAL"]
+
 if not os.path.exists(os.path.join(commons.cacheDir, "hangar-api")):
 	os.makedirs(os.path.join(commons.cacheDir, "hangar-api"))
 
@@ -47,7 +49,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 
 def parseAPI(apiData: dict) -> list:
-	matches = {"release": [], "snapshot": [], "alpha": [], "translation": []}
+	matchesbychannel = {"release": [], "snapshot": [], "alpha": [], "translation": []}
 	for version in apiData["versions"]["result"]:
 		if commons.minecraft_version in version["platformDependencies"]["PAPER"]:
 			version["folder"] = "plugins"
@@ -55,11 +57,11 @@ def parseAPI(apiData: dict) -> list:
 			versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "dependencies": [], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
 			versionf["date"] = version["createdAt"]
 			if commons.instancecfg["loader"] == "paper" or (commons.instancecfg["loader"] in ["folia", "purpur"] and commons.config["allow-upstream"]) or (commons.instancecfg["loader"] == "folia" and "SUPPORTS_FOLIA" in version["settings"]["tags"]):
-				matches[version["channel"]["name"].lower()].append(versionf)
+				matchesbychannel[version["channel"]["name"].lower()].append(versionf)
 			elif commons.instancecfg.get("translation-layer", None) == "cardboard":
-				matches["translation"].append(versionf)
+				matchesbychannel["translation"].append(versionf)
 
-	matches = matches["release"] + matches["snapshot"] + matches["alpha"] + matches["translation"]
+	matches = matchesbychannel.pop("release") + matchesbychannel.pop("snapshot") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
 		logger.error("No matching versions found for mod '%s", apiData['namespace']['slug'])
 		return "No version"

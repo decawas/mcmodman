@@ -4,7 +4,9 @@ modrinth api functions
 from hashlib import sha512
 import logging, os
 from requests import get, RequestException
-import toml, cache, commons
+import cache, commons
+
+TAGS = ["SEARCH", "EXTERNAL"]
 
 if not os.path.exists(os.path.join(commons.cacheDir, "modrinth-api")):
 	os.makedirs(os.path.join(commons.cacheDir, "modrinth-api"))
@@ -61,21 +63,21 @@ def parseAPI(api_data: dict) -> list:
 		logger.warning("content of type '%s' can only be used on worlds", ptype)
 		return ptype
 
-	matches = {"release": [], "beta": [], "alpha": [], "translation": []}
+	matchesbychannel = {"release": [], "beta": [], "alpha": [], "translation": []}
 	for version in api_data["versions"]:
 		version["source"] = "modrinth"
 		version["date"] = version["date_published"]
 		version["type"] = ptype
 		if commons.minecraft_version in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = folder
-			matches[version["version_type"]].append(version)
+			matchesbychannel[version["version_type"]].append(version)
 		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "plugins"
-			matches["translation"].append(version)
+			matchesbychannel["translation"].append(version)
 		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "mods"
-			matches["translation"].append(version)
-	matches = matches["release"] + matches["beta"] + matches["alpha"] + matches["translation"]
+			matchesbychannel["translation"].append(version)
+	matches = matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
 		logger.error("No matching versions found for mod '%s", api_data['slug'])
 		return "No version"
