@@ -2,7 +2,7 @@
 defines common variables, and meta-instance functions
 """
 import argparse
-import logging, os, appdirs, toml
+import logging, os, sys, appdirs, toml
 from instance import instanceFirstrun
 
 __version__ = "25.21"
@@ -85,12 +85,16 @@ class InvalidOption(Exception):
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 
+exe_path = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)) 
+
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
 if not os.path.exists(os.path.expanduser(os.path.join(config_dir, "config.toml"))):
+	if not os.path.exists(os.path.join(exe_path, "config-template.toml")):
+		raise FileNotFoundError
 	with open(os.path.expanduser(os.path.join(config_dir, "config.toml")), "w", encoding="utf-8") as f:
-		config = toml.load("config-template.toml")
+		config = toml.load(os.path.join(exe_path, "config-template.toml"))
 		config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
 		config["log-file"] = os.path.join(config_dir, "mcmodman.log")
 		toml.dump(config, f)
@@ -135,7 +139,7 @@ if args["operation"] != "instance":
 	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
 		instanceFirstrun(instance_dir)
 
-	instancecfg = toml.load(f"{instance_dir}/mcmodman_managed.toml")
+	instancecfg = toml.load(os.path.join(instance_dir, "mcmodman_managed.toml"))
 	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 

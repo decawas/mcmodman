@@ -5,8 +5,6 @@ from pathlib import Path
 import os, re, json, logging, toml, appdirs
 import commons
 
-# Global variables
-config_dir = appdirs.user_config_dir("ekno/mcmodman")
 logger = logging.getLogger(__name__)
 
 def instanceFirstrun(instance_dir):
@@ -46,7 +44,7 @@ def instanceFirstrun(instance_dir):
 		advancements = sorted(Path(os.path.expanduser(f"{instance_dir}/advancements")).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
 			log = json.loads(f.read())
-		with open("dataversion.json", "r", encoding="utf-8") as f:
+		with open(os.path.join(commons.exe_path, "dataversion.json"), "r", encoding="utf-8") as f:
 			dataversions = json.loads(f.read())
 
 		if "DataVersion" not in log or log["DataVersion"] < 1444:
@@ -116,13 +114,13 @@ def instanceMeta():
 			return
 
 		commons.instances[commons.args["name"]] = {"name": commons.args["name"], "path": commons.args["path"]}
-		with open(f"{config_dir}/instances.toml", 'w', encoding='utf-8') as f:
+		with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
 			toml.dump(commons.instances, f)
 		print(f"Added instance '{commons.args['name']}'")
 	if commons.args["suboperation"] == "select":
 		if commons.args["name"] in commons.instances:
 			commons.config["selected-instance"] = commons.args["name"]
-			with open(f"{config_dir}/config.toml", 'w', encoding='utf-8') as f:
+			with open(os.path.join(commons.config_dir, "config.toml"), 'w', encoding='utf-8') as f:
 				toml.dump(commons.config, f)
 			print(f"Selected instance '{commons.args['name']}'")
 			return
@@ -134,7 +132,7 @@ def instanceMeta():
 		for i, instance in enumerate(commons.config["instances"]):
 			if instance["name"] == commons.args["name"]:
 				del commons.config["instances"][i]
-				with open(f"{config_dir}/instances.toml", 'w', encoding='utf-8') as f:
+				with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
 					toml.dump(commons.instances, f)
 				print(f"Deleted instance '{commons.args['name']}'")
 				return

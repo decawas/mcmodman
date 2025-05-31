@@ -68,9 +68,9 @@
 ## Build
 simply run 
 ```
-pyinstaller --onefile mcmodman.py indexing.py commons.py modrinth.py hangar.py local.py instance.py cache.py --add-data=dataversion.json:dataversion.json --add-data=config-template.toml:config-template.toml
+python setup.py build
 ```
-requires python and pyinstaller to be installed, the 'appdirs' and 'toml' modules are dependencies
+requires python and cxfreeze to be installed, the 'appdirs', 'requests', 'toml' and 'pyyaml' modules are dependencies
 
 ## Installation
 
@@ -78,11 +78,12 @@ To install mcmodman there are two methods
 
 1. **Copy to /usr/local/bin**
 
-   Copy the `mcmodman` executable to the `/usr/local/bin` directory:
+   Link the `mcmodman` executable to the `/usr/local/bin` directory:
 
    ```bash
-   sudo cp mcmodman /usr/local/bin/
+   sudo ln -s /path/to/mcmodman /usr/local/bin
    ```
+   make sure to replace "/path/to" with the path to your executable
 
    This method places the executable in a standard location for user-installed programs.
 
