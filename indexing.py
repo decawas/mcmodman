@@ -1,18 +1,18 @@
 """
 handles indexing for content
 """
-import logging, os, toml, commons
+import logging, os, tomlkit, commons
 
 logger = logging.getLogger(__name__)
 
 def mcmm(slug, mod_data, reason="explicit", source="local"):
-	if not os.path.exists(os.path.expanduser(f"{commons.instance_dir}/.content/")):
-		os.makedirs(os.path.expanduser(f"{commons.instance_dir}/.content/"))
+	if not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, ".content"))):
+		os.makedirs(os.path.expanduser(os.path.join(commons.instance_dir, ".content")))
 	print(f"Indexing mod '{slug}'")
-	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("project_id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data['versions'][0].get("type", ""), "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
+	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data['versions'][0].get("type", ""), "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
 
 	with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), 'w',  encoding='utf-8') as f:
-		toml.dump(index, f)
+		f.write(tomlkit.dumps(index))
 		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
 	if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source != "local":
 		packwiz(slug, mod_data)
@@ -29,14 +29,15 @@ def packwiz(slug, mod_data):
 		index["side"] = "server"
 	elif mod_data["server_side"] == "unsupported":
 		index["side"] = "client"
-	index = toml.dumps(index)[:-1]
+	index = tomlkit.dumps(index)[:-1]
 	with open(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
 		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index", f"{slug}.pw.toml"))
 		file.write(index)
 
 def get(slug, reason="explicit"):
 	if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-		index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+		with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), "r", encoding="utf-8") as f:
+			index = tomlkit.load(f)
 		logger.info("Loaded index for mod '%s'", slug)
 		return index
 	elif commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):

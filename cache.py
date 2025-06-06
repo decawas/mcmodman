@@ -4,7 +4,7 @@ cache related functions
 
 from shutil import copyfile
 from time import time
-import logging, os, toml, commons
+import logging, os, tomlkit, commons
 
 APICACHEVERSION = 3
 
@@ -13,7 +13,8 @@ def isAPICached(filename: str, source: str):
 	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml")
 	if not os.path.exists(path):
 		return False
-	cacheData = toml.load(path)
+	with open(path, "r", encoding="utf-8") as f:
+		cacheData = tomlkit.load(f)
 	return time() - cacheData["time"] <= commons.config["api-expire"] and cacheData["api-cache-version"] == APICACHEVERSION
 
 def isModCached(slug: str, loader: str, mod_version: str, game_version: str):
@@ -22,7 +23,8 @@ def isModCached(slug: str, loader: str, mod_version: str, game_version: str):
 def getAPICache(slug: str, source: str):
 	if not isAPICached(slug, source):
 		return False
-	return toml.load(os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml"))["api"]
+	with open(os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.toml"), "r", encoding="utf-8") as f:
+		return tomlkit.load(f)["api"]
 
 def getModCache(slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
 	if not isModCached(slug, loader, mod_version, game_version):
@@ -37,7 +39,7 @@ def setAPICache(slug: str, apiData: dict, source: str):
 	if slug in commons.args["query" if commons.args['operation'] == "search" else "slugs"]:
 		print(f"Caching data for {'query' if commons.args['operation'] == 'search' else 'mod'} '{slug}'")
 	with open(path, "w", encoding="utf-8") as f:
-		toml.dump(cacheData, f)
+		tomlkit.dump(cacheData, f)
 
 def setModCache(slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
 	if isModCached(slug, loader, mod_version, game_version):
@@ -53,7 +55,8 @@ def clearCache():
 		return
 	for source in ["modrinth", "hangar"]:
 		for file in os.listdir(os.path.join(commons.cacheDir, f"{source}-api")):
-			cacheData = toml.load(os.path.join(commons.cacheDir, f"{source}-api", file))
+			with open(os.path.join(commons.cacheDir, f"{source}-api", file), "r", encoding="utf-8") as f:
+				cacheData = tomlkit.load(f)
 			if time() - cacheData["time"] > commons.config["api-expire"] or cacheData.get("api-cache-verison", 0) != APICACHEVERSION:
 				os.remove(os.path.join(commons.cacheDir, f"{source}-api", file))
 				logger.info("Deleted cache for %s because it has expired", file.split('.')[0])

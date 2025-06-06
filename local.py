@@ -1,5 +1,5 @@
 from shutil import copyfile, SameFileError
-import logging, os, json, yaml, zipfile, toml, commons
+import logging, os, json, yaml, zipfile, tomlkit, commons
 
 TAGS = []
 
@@ -40,7 +40,7 @@ def getAPI(filename: str) -> dict:
 			modData["from"] = "fabric.mod.json"
 		elif "META-INF/mods.toml" in moddir:
 			with mod.open('META-INF/mods.toml') as data:
-				modData = toml.loads(data.read().decode("utf-8"))
+				modData = tomlkit.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "mod"
 			modData["from"] = "mods.toml"
 		elif "plugin.yml" in moddir:

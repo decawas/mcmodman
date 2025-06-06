@@ -2,7 +2,7 @@
 defines common variables, and meta-instance functions
 """
 import argparse
-import logging, os, sys, appdirs, toml
+import logging, os, sys, appdirs, tomlkit
 from instance import instanceFirstrun
 
 __version__ = "25.21"
@@ -28,6 +28,7 @@ def parse_args():
 	parser.add_argument("-d", "--dependency", action="store_true", help="Dependency")
 	parser.add_argument("-p", "--optional", action="store_true", help="Optional")
 	parser.add_argument("-y", "--noconfirm", action="store_true", help="Skip the confirmation dialogue, does not skip the ignore question in downgrade")
+	parser.add_argument("-c", "--color", action="store_true", help="Enable colour output")
 	parser.add_argument("slugs", nargs="*", help="Mod slugs to operate on")
 
 	try:
@@ -77,6 +78,7 @@ def parse_args():
 	result["dependency"] = args.dependency
 	result["optional"] = args.optional
 	result["noconfirm"] = args.noconfirm
+	result["color"] = args.color
 	result["lock"] = result.get("operation") in ["sync", "update", "remove", "toggle", "downgrade"]
 	return result
 
@@ -84,22 +86,23 @@ class InvalidOption(Exception):
 	"error: invalid option"
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
-
-exe_path = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)) 
+exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)) 
 
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
 if not os.path.exists(os.path.expanduser(os.path.join(config_dir, "config.toml"))):
-	if not os.path.exists(os.path.join(exe_path, "config-template.toml")):
+	if not os.path.exists(os.path.join(exe_dir, "config-template.toml")):
 		raise FileNotFoundError
+	with open(os.path.join(exe_dir, "config-template.toml"), "r", encoding="utf-8") as f:
+		config = tomlkit.load(f)
 	with open(os.path.expanduser(os.path.join(config_dir, "config.toml")), "w", encoding="utf-8") as f:
-		config = toml.load(os.path.join(exe_path, "config-template.toml"))
 		config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
 		config["log-file"] = os.path.join(config_dir, "mcmodman.log")
-		toml.dump(config, f)
+		tomlkit.dump(config, f)
 else:
-	config = toml.load(os.path.join(config_dir, "config.toml"))
+	with open(os.path.join(config_dir, "config.toml"), "r", encoding="utf-8") as f:
+		config = tomlkit.load(f)
 
 logging.basicConfig(filename=config["log-file"], level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
@@ -117,9 +120,10 @@ except Exception as e:
 if not os.path.exists(os.path.join(config_dir, "instances.toml")):
 	with open(os.path.join(config_dir, "instances.toml"), 'w',  encoding='utf-8') as f:
 		instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
-		toml.dump(instances, f)
+		tomlkit.dump(instances, f)
 else:
-	instances = toml.load(os.path.join(config_dir, "instances.toml"))
+	with open(os.path.join(config_dir, "instances.toml"), "r", encoding="utf-8") as f:
+		instances = tomlkit.load(f)
 logger.info("instances %s", instances)
 
 cacheDir = config["cache-dir"]
@@ -139,10 +143,16 @@ if args["operation"] != "instance":
 	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
 		instanceFirstrun(instance_dir)
 
-	instancecfg = toml.load(os.path.join(instance_dir, "mcmodman_managed.toml"))
+	with open(os.path.join(instance_dir, "mcmodman_managed.toml"), "r", encoding="utf-8") as f:
+		instancecfg = tomlkit.load(f)
 	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 
 	logger.info("instance %s", instancecfg)
 
 	loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}
+
+class color:
+	NORMAL = "\033[0m"
+	INPUT = "\033[94m" if args["color"] or config.get("Color", False) else "\033[0m"
+	ERROR = "\033[91m" if args["color"] or config.get("Color", False) else "\033[0m"

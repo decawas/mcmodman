@@ -2,7 +2,7 @@
 main logic, and functions with front-end functionality
 """
 
-import logging, os, toml, cache, commons, hangar, modrinth, indexing, instance, local
+import logging, os, tomlkit, commons, cache, hangar, modrinth, indexing, instance, local
 from typing import List # DEBUG
 
 logger = logging.getLogger(__name__)
@@ -18,33 +18,29 @@ class ModType():
 			self.source = self.index["source"]
 		else:
 			self.source = "local" if any(ext in self.slug for ext in (".jar", ".zip")) else "sourceagnostic"
-	
+
 	def isIgnored(self) -> bool:
 		return self.slug in commons.config["ignored-mods"]
 
 	def isDisabled(self) -> bool | None: # returns true if disabled, false if enabled and none if not installed
 		return True if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}")) else None
-	
+
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
-	
+
 	def toggle(self):
 		if self.index["version"] == "None": # if not installed, raise target not found
 			raise TargetNotFoundError(self.slug)
 		if self.isDisabled():
 			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}")
-			self.index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}")
 		else:
 			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}.disabled")
-			self.index['filename'] = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled")
 		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 		os.rename(currentpath, newpath)
 		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
-		with open(os.path.join(commons.instance_dir, ".content", f"{self.slug}.mm.toml"), "w", encoding="utf-8") as f:
-			toml.dump(self.index, f)
 
-def addMod(): # TODO: merge refactored functions into their original places
-	slugs = commons.args["slugs"]
+def addMod():
+	slugs = [] + commons.args["slugs"]
 	if commons.args["all"]:
 		slugs.extend(queryMod())
 	if not slugs:
@@ -54,7 +50,7 @@ def addMod(): # TODO: merge refactored functions into their original places
 
 	i, toremove, checked = -1, [], []
 	while i < len(mods) - 1:
-		i += 1 
+		i += 1
 		mod = mods[i]
 		mod.api_data = sources[mod.source].getAPI(mod.slug)
 		mod.source = mod.api_data["source"]
@@ -71,7 +67,7 @@ def addMod(): # TODO: merge refactored functions into their original places
 			toremove.append(mod)
 			continue
 		if isinstance(mod.api_data["versions"], str):
-			print(f"No suitable version found for mod '{mod['slug']}'")
+			print(f"No suitable version found for mod '{mod.slug}'")
 			toremove.append(mod)
 			continue
 		elif mod.api_data["versions"][0]["id"] == mod.index["version-id"]:
@@ -80,7 +76,7 @@ def addMod(): # TODO: merge refactored functions into their original places
 				toremove.append(mod)
 				continue
 		for dependency in mod.api_data["versions"][0]["dependencies"]:
-			if dependency["project_id"] not in checked:
+			if dependency["project_id"] in checked:
 				continue
 			dep_api_data = sources[mod.source].getAPI(dependency["project_id"], depcheck=True)
 			reason = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
@@ -102,7 +98,7 @@ def addMod(): # TODO: merge refactored functions into their original places
 		if mod.slug in ["connector", "cardboard"] and commons.instancecfg["translation-layer"] == "None":
 			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				toml.dump(commons.instancecfg, f)
+				tomlkit.dump(commons.instancecfg, f)
 		sources[mod.source].getMod(mod.slug, mod.api_data)
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
 		indexing.mcmm(mod.slug, mod.api_data, mod.index['reason'], mod.source)
@@ -127,10 +123,10 @@ def removeMod(slugs=None):
 		if mod.slug in ("cardboard", "connector"):
 			commons.instancecfg["translation-layer"] = "None"
 			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				toml.dump(commons.instancecfg, f)
+				tomlkit.dump(commons.instancecfg, f)
+		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] if not mod.isDisabled else f"{mod.index["filename"]}.disabled")):
+			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] if not mod.isDisabled else f"{mod.index["filename"]}.disabled"))
 		os.remove(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.toml"))
-		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
-			os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
 		logger.info("Removed content '%s'", mod.slug)
 		if "index-compatibility" in commons.instancecfg and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
 			os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
@@ -146,7 +142,7 @@ def confirm(mods: List[ModType]):
 		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][0]['version_number'] if op == "download"  else None}")
 	print(f"\nTotal {op} size: {convertBytes(totalnewsize if op == "download" else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
-	yn = input("\n:: Proceed with download? [Y/n]: ")
+	yn = input(f"\n{commons.color.INPUT}::{commons.color.NORMAL} Proceed with download? [Y/n]: ")
 	print("")
 	if yn.lower() != 'y' and yn != '':
 		logger.error("User declined %s", op)
@@ -171,7 +167,8 @@ def queryMod(slugs=None):
 	if isinstance(slugs, list):
 		for slug in slugs:
 			if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-				index = toml.load(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+				with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), "r", encoding="utf-8") as f:
+					index = tomlkit.load(f)
 				print(f"{slug} {index['version']}")
 				logger.info("Found mod %s (%s) version %s (%s)", slug, index.get("mod-id"), index['version'], index['version-id'])
 			else:
@@ -216,21 +213,21 @@ def downgradeMod():
 		for source in [source for source in sources if "EXTERNAL" in sources[source].TAGS]:
 			if isinstance(mod.api_data[source], str):
 				continue
-			mod.api_data[source]["versions"] = sources[source].parseAPI(mod.api_data[source]) 
+			mod.api_data[source]["versions"] = sources[source].parseAPI(mod.api_data[source])
 			if isinstance(mod.api_data[source].get("versions"), str):
 				continue
 			if not versions:
 				mod.api_data["type"] = mod.api_data[source]["project_type"]
 			versions.extend(mod.api_data[source]["versions"])
 		for version in versions:
-			version["date"] = version["date_published"] or version["createdAt"] 
+			version["date"] = version["date_published"] or version["createdAt"]
 		mod.api_data["versions"] = sorted(versions, key=lambda x: x['date'], reverse=True)
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
 			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(mod.slug, commons.mod_loader, version['version_number'], commons.minecraft_version) else ''
 			print(f"  {len(mod.api_data['versions']) - i - 1})\t{version["source"]}/{mod.slug}\t{version['version_number']}\t{suffix}")
 
-		choice = input(":: Choose version: ")
+		choice = input(f"{commons.color.INPUT}::{commons.color.NORMAL} Choose version: ")
 		try:
 			choice = int(choice)
 		except ValueError as exc:
@@ -239,28 +236,30 @@ def downgradeMod():
 			raise InvalidChoice(f"Invalid choice, '{choice}' larger than '{len(mod.api_data['versions']) - 1}', list index out of range")
 		if mod.api_data["versions"][choice]["id"] == mod.index["version-id"]:
 			raise InvalidChoice("Invalid choice, the selected version is already installed")
-		
+
 		mod.api_data['versions'][0] = mod.api_data['versions'][choice]
 		mod.source = mod.api_data['versions'][0]["source"]
-	
+		mod.api_data[mod.source]["versions"][0] = mod.api_data["versions"][0]
+		mod.api_data = mod.api_data[mod.source]
+
 	_ = "" if commons.args["noconfirm"] else confirm(mods)
 
 	toignore = []
 	for mod in mods:
-		ignore =  input(f":: add {mod.slug} to ignored-packages? [y/N]: ").lower()
+		ignore =  input(f"{commons.color.INPUT}::{commons.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 		if ignore == "y":
 			toignore.append(mod.slug)
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
 		if mod.slug in ["connector", "cardboard"]:
 			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				toml.dump(commons.instancecfg, f)
-		
+				tomlkit.dump(commons.instancecfg, f)
+
 		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(mod.slug, mod.api_data)
 		indexing.mcmm(mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
 		cache.setModCache(mod.slug, commons.mod_loader, mod.api_data["versions"][0]['version_number'], commons.minecraft_version, mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
 		print(f"Mod '{mod.slug}' successfully updated")
-	
+
 	ignoreMod(toignore)
 
 def ignoreMod(slugs=None):
@@ -270,7 +269,7 @@ def ignoreMod(slugs=None):
 	commons.config["ignored-mods"] = list(set(commons.config["ignored-mods"]))
 
 	with open(os.path.join(commons.config_dir, "config.toml"), "w", encoding="utf-8") as f:
-		toml.dump(commons.config, f)
+		tomlkit.dump(commons.config, f)
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -304,19 +303,17 @@ class sourceagnostic:
 			del apiData[source]
 		if not apiData:
 			raise TargetNotFoundError(slug)
-		if isinstance(apiData.get("modrinth"), dict) and isinstance(apiData.get("hangar"), dict):
+		if len(list(apiData.keys())) >  1:
 			print(f"found multiple sources for mod '{slug}'\n")
 			for i, source in enumerate(reversed(apiData)):
 				print(f"  {len(apiData) - i - 1})\t{source}/{slug}")
-			choice = input("\n:: Choose source: ")
+			choice = input(f"\n{commons.color.INPUT}::{commons.color.NORMAL} Choose source: ")
 			try:
 				choice = int(choice)
 			except ValueError as exc:
-				print("Invalid choice")
 				raise InvalidChoice(f"Invalid choice, could not cast '{choice}' to int") from exc
-			if 0 > choice >= len(apiData):
-				print("Invalid choice")
-				raise InvalidChoice(f"Invalid choice, '{choice}' larger than '{len(apiData)}', list index out of range")
+			if choice < 0 or choice >= len(apiData):
+				raise InvalidChoice(f"Invalid choice, must be between 0 and {len(apiData) - 1}")
 			return list(apiData.values())[choice]
 		for s in apiData:
 			if isinstance(apiData[s], dict):
@@ -328,6 +325,7 @@ if __name__ == "__main__":
 			try:
 				fd = os.open(os.path.join(commons.instance_dir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 				with os.fdopen(fd, 'w', encoding='utf-8') as f:
+					f.write("lock")
 					logger.info("Setting lock")
 			except FileExistsError:
 				print("mcmodman is already running for this instance")
@@ -345,25 +343,24 @@ if __name__ == "__main__":
 		print("Interrupt signal received")
 		logger.info("Process interrupted by user")
 	except LockExistsError as e:
-		print(f"error: could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
+		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
 		logger.critical("already running for instance")
 		raise SystemExit from e
 	except InvalidChoice as e:
-		print(f"error: {e}")
+		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} {e}")
 	except NoValidVersions:
-		print("error: could not find any valid versions")
+		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} could not find any valid versions")
 	except NoTargetsError:
-		print("error: no targets specified")
+		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} no targets specified")
 		logger.critical("user called operation that takes targets but no targets given")
 	except TargetNotFoundError as e:
-		print(f"error: target not found: {e}")
+		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} target not found: {e}")
 		logger.critical("user gave target that doesnt exist")
 	except RuntimeError as e:
-		print("An error occurred while running mcmodman")
+		print(f"{commons.color.ERROR}An error occurred while running mcmodman{commons.color.NORMAL}")
 		logger.critical(e)
-		raise
-	except Exception as e:
-		print("An unexpected error occured", e)
+	except Exception as e: # allows for removing the lock file when an unhandled error occurs
+		print(f"{commons.color.ERROR}An unexpected error occured, {e}{commons.color.NORMAL}")
 		logger.critical(e)
 		raise
 	finally:

@@ -2,7 +2,7 @@
 Instance management functions for mcmodman
 """
 from pathlib import Path
-import os, re, json, logging, toml, appdirs
+import os, re, json, logging, tomlkit, appdirs
 import commons
 
 logger = logging.getLogger(__name__)
@@ -31,17 +31,26 @@ def instanceFirstrun(instance_dir):
 			"sponge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/sponge/sponge.conf"), "version_detect": r"spongevanilla-(\d+(?:\.\d+)*)-"}
 		}
 
-		logger.info("Found loaders %s", ", ".join(loaders))
 		for loader, det in loader_detector.items():
 			if det["detect"]():
 				loaders.append(loader)
 				match = re.search(det["version_detect"], log)
 				break
+		logger.info("Found loaders %s", ", ".join(loaders))
+			
+		if len(loaders) > 1 and loaders[0] not in ["folia", "purper", "paper", "spigot"]:
+			print("mcmodman does not support instances with multiple loaders")
+			raise RuntimeError("mcmodman does not support instances with multiple loaders")
+		if not loaders:
+			print("Could not find any mod loaders for this instance\nif you are using Rift or RML you will have to manually set that")
+			loaders = ["vanilla"]
+			match = []
+
 		managefile["modfolder"] = "plugins" if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None else "mods"
 
 		managefile["index-compatibility"] = compdetect(instance_dir)
-	elif os.path.exists(os.path.expanduser(f"{instance_dir}/level.dat")):
-		advancements = sorted(Path(os.path.expanduser(f"{instance_dir}/advancements")).iterdir(), key=os.path.getmtime)
+	elif os.path.exists(os.path.expanduser(os.path.join(instance_dir, "level.dat"))):
+		advancements = sorted(Path(os.path.expanduser(os.path.join(instance_dir, "advancements"))).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
 			log = json.loads(f.read())
 		with open(os.path.join(commons.exe_path, "dataversion.json"), "r", encoding="utf-8") as f:
@@ -59,13 +68,6 @@ def instanceFirstrun(instance_dir):
 		print("instance must be run at least once before using mcmodman")
 		raise SystemExit
 
-	if len(loaders) > 1 and loaders[0] not in ["folia", "purper", "paper", "spigot"]:
-		print("mcmodman does not support instances with multiple loaders")
-		raise RuntimeError("mcmodman does not support instances with multiple loaders")
-	if not loaders:
-		print("Could not find any mod loaders for this instance\nif you are using Rift or RML you will have to manually set that")
-		loaders = ["vanilla"]
-
 	managefile["loader"] = loaders[0]
 
 	managefile["type"] = "server" if os.path.exists(f"{instance_dir}/server.properties") else "client" if os.path.exists(f"{instance_dir}/options.txt") else "world" if os.path.exists(f"{instance_dir}/level.dat") else None
@@ -79,7 +81,7 @@ def instanceFirstrun(instance_dir):
 		raise RuntimeError("mcmodman could not find a minecraft version")
 
 	with open(os.path.join(instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-		toml.dump(managefile, f)
+		tomlkit.dump(managefile, f)
 		logger.info("writing mcmodman_managed.toml to instance")
 
 	if not os.path.exists(os.path.join(instance_dir, ".content")):
@@ -92,7 +94,7 @@ def compdetect(instanceDir):
 		p = "Prism Launcher" if os.path.exists(f"{instanceDir}/../../../prismlauncher.cfg") else "PolyMC" if os.path.exists(f"{instanceDir}/../../../polymc.cfg") else "MultiMC"
 		print(f"mcmodman has detected that this instance is managed by {p}\nwould you like to enable dual indexing for {p} compatibility?")
 		logger.info("found instance.cfg, instance is likely managed by a MultiMC fork")
-		prismcomp = input(":: Enable dual indexing? [Y/n]: ")
+		prismcomp = input(f"{commons.color.INPUT}::{commons.color.NORMAL} Enable dual indexing? [Y/n]: ")
 		if prismcomp.lower() == "y" or prismcomp == "":
 			return "packwiz"
 
@@ -115,13 +117,13 @@ def instanceMeta():
 
 		commons.instances[commons.args["name"]] = {"name": commons.args["name"], "path": commons.args["path"]}
 		with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
-			toml.dump(commons.instances, f)
+			tomlkit.dump(commons.instances, f)
 		print(f"Added instance '{commons.args['name']}'")
 	if commons.args["suboperation"] == "select":
 		if commons.args["name"] in commons.instances:
 			commons.config["selected-instance"] = commons.args["name"]
 			with open(os.path.join(commons.config_dir, "config.toml"), 'w', encoding='utf-8') as f:
-				toml.dump(commons.config, f)
+				tomlkit.dump(commons.config, f)
 			print(f"Selected instance '{commons.args['name']}'")
 			return
 		print(f"Instance '{commons.args['name']}' not found")
@@ -133,7 +135,7 @@ def instanceMeta():
 			if instance["name"] == commons.args["name"]:
 				del commons.config["instances"][i]
 				with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
-					toml.dump(commons.instances, f)
+					tomlkit.dump(commons.instances, f)
 				print(f"Deleted instance '{commons.args['name']}'")
 				return
 		print(f"Instance '{commons.args['name']}' not found")
