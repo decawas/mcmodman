@@ -2,6 +2,7 @@
 handles indexing for content
 """
 import logging, os, tomlkit, commons
+from configobj import ConfigObj
 
 logger = logging.getLogger(__name__)
 
@@ -9,11 +10,24 @@ def mcmm(slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, ".content"))):
 		os.makedirs(os.path.expanduser(os.path.join(commons.instance_dir, ".content")))
 	print(f"Indexing mod '{slug}'")
-	index = {'index-version': 2, 'filename': mod_data['versions'][0]['files'][0]['filename'], 'slug': slug, 'mod-id': mod_data.get("id" or "projectID"), 'version': mod_data['versions'][0]["version_number"], 'version-id': mod_data["versions"][0]["id"], "type": mod_data['versions'][0].get("type", ""), "folder": os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"])), 'source': source, 'game-version': commons.minecraft_version, 'reason': reason}
 
-	with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), 'w',  encoding='utf-8') as f:
-		f.write(tomlkit.dumps(index))
-		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"))
+	index = ConfigObj(unrepr=True)
+	index['index-version'] = 3
+	index['filename'] = mod_data['versions'][0]['files'][0]['filename']
+	index['slug'] = slug
+	index['mod-id'] = mod_data.get("id") or mod_data.get("projectID")
+	index['version'] = mod_data['versions'][0]["version_number"]
+	index['version-id'] = mod_data["versions"][0]["id"]
+	index['type'] = mod_data['versions'][0].get("type", "")
+	index['folder'] = os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"]))
+	index['source'] = source
+	index['game-version'] = commons.minecraft_version
+	index['reason'] = reason
+
+	index.filename = os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini")
+	index.write()
+	logger.debug("index %s for mod '%s' written to %s", dict(index), slug, index.filename)
+
 	if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source != "local":
 		packwiz(slug, mod_data)
 
@@ -35,13 +49,17 @@ def packwiz(slug, mod_data):
 		file.write(index)
 
 def get(slug, reason="explicit"):
-	if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
+	if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini")):
+		index = ConfigObj(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini"), unrepr=True)
+		logger.info("Loaded index for mod '%s'", slug)
+		return dict(index)
+	elif os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
 		with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), "r", encoding="utf-8") as f:
 			index = tomlkit.load(f)
-		logger.info("Loaded index for mod '%s'", slug)
+		logger.info("Loaded index for mod '%s' (legacy)", slug)
 		return index
-	elif commons.args["operation"] in ["sync", "downgrade"] and not os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-		index = {"slug": {slug}, "filename": "-", "version": "None", "version-id": "None", "reason": reason}
+	elif commons.args["operation"] in ["sync", "downgrade"]:
+		index = {"slug": slug, "filename": "-", "version": "None", "version-id": "None", "reason": reason}
 		logger.info("Created dummy index for new mod '%s'", slug)
 		return index
 	return None

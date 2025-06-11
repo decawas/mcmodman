@@ -70,7 +70,7 @@ simply run
 ```
 python setup.py build
 ```
-requires python and cxfreeze to be installed, the 'appdirs', 'requests', 'tomlkit' and 'pyyaml' modules are dependencies
+requires python and cxfreeze to be installed, the 'appdirs', 'configobj','requests', 'tomlkit' and 'pyyaml' modules are dependencies
 
 ## Installation
 

@@ -3,6 +3,7 @@ defines common variables, and meta-instance functions
 """
 import argparse
 import logging, os, sys, appdirs, tomlkit
+from configobj import ConfigObj, validate
 from instance import instanceFirstrun
 
 __version__ = "25.21"
@@ -10,18 +11,22 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="mcmodman command line interface")
-	group = parser.add_mutually_exclusive_group(required=True)
-	group.add_argument("-S", "--sync", action="store_true", help="Sync mods")
-	group.add_argument("-U", "--upgrade", action="store_true", help="Upgrade mods")
-	group.add_argument("-R", "--remove", action="store_true", help="Remove mods")
-	group.add_argument("-T", "--toggle", action="store_true", help="Toggle mods")
-	group.add_argument("-Q", "--query", action="store_true", help="Query mods")
-	group.add_argument("-D", "--downgrade", action="store_true", help="Downgrade mods")
-	group.add_argument("--ignore", action="store_true", help="Ignore mods")
-	group.add_argument("-F", "--search", action="store_true", help="Search mods")
-	group.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
-	group.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
-	group.add_argument("--version", action="store_true")
+	ops = parser.add_mutually_exclusive_group(required=True)
+	ops.add_argument("-S", "--sync", action="store_true", help="Sync mods")
+	ops.add_argument("-U", "--upgrade", action="store_true", help="Upgrade mods")
+	ops.add_argument("-R", "--remove", action="store_true", help="Remove mods")
+	ops.add_argument("-T", "--toggle", action="store_true", help="Toggle mods")
+	ops.add_argument("-Q", "--query", action="store_true", help="Query mods")
+	ops.add_argument("-D", "--downgrade", action="store_true", help="Downgrade mods")
+	ops.add_argument("--ignore", action="store_true", help="Ignore mods")
+	ops.add_argument("-F", "--search", action="store_true", help="Search mods")
+	ops.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
+	ops.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
+	ops.add_argument("--version", action="store_true")
+	
+	asexpldeps = parser.add_mutually_exclusive_group()
+	asexpldeps.add_argument("--asexplicit", action="store_true", help="Define newly installed mods as explicit, even if they are dependencies")
+	asexpldeps.add_argument("--asdeps", action="store_true", help="Define newly installed mods as dependencies, even if they are installed explicitly")
 
 	parser.add_argument("-a", "--all", action="store_true", help="Apply to all")
 	parser.add_argument("-e", "--explicit", action="store_true", help="Explicit")
@@ -79,6 +84,8 @@ def parse_args():
 	result["optional"] = args.optional
 	result["noconfirm"] = args.noconfirm
 	result["color"] = args.color
+	result["asexplicit"] = args.asexplicit
+	result["asdeps"] = args.asdeps
 	result["lock"] = result.get("operation") in ["sync", "update", "remove", "toggle", "downgrade"]
 	return result
 
@@ -91,18 +98,28 @@ exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else o
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
-if not os.path.exists(os.path.expanduser(os.path.join(config_dir, "config.toml"))):
-	if not os.path.exists(os.path.join(exe_dir, "config-template.toml")):
+config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(config_dir, "mcmodman.conf")))
+if os.path.exists(os.path.join(config_dir, "config.toml")) and not os.path.exists(config_file):
+	with open(os.path.join(config_dir, "config.toml"), "r") as f:
+		oldconfig = tomlkit.load(f)
+	config = ConfigObj(unrepr=True)
+	config.filename = config_file
+	for value in oldconfig:
+		config[value] = oldconfig[value]
+	config.write()
+	os.remove(os.path.join(config_dir, "config.toml"))
+elif not os.path.exists(config_file):
+	if not os.path.exists(os.path.join(exe_dir, "config-template.ini")):
 		raise FileNotFoundError
-	with open(os.path.join(exe_dir, "config-template.toml"), "r", encoding="utf-8") as f:
-		config = tomlkit.load(f)
-	with open(os.path.expanduser(os.path.join(config_dir, "config.toml")), "w", encoding="utf-8") as f:
-		config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
-		config["log-file"] = os.path.join(config_dir, "mcmodman.log")
-		tomlkit.dump(config, f)
+	config = ConfigObj(os.path.join(exe_dir, "config-template.ini"), unrepr=True)
+	config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
+	config["log-file"] = os.path.join(config_dir, "mcmodman.log")
+	config.filename = config_file
+	config.write()
 else:
-	with open(os.path.join(config_dir, "config.toml"), "r", encoding="utf-8") as f:
-		config = tomlkit.load(f)
+	config = ConfigObj(config_file, unrepr=True)
+
+logger.info(config)
 
 logging.basicConfig(filename=config["log-file"], level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
@@ -117,13 +134,23 @@ except Exception as e:
 	logger.critical("invalid option")
 	raise
 
-if not os.path.exists(os.path.join(config_dir, "instances.toml")):
-	with open(os.path.join(config_dir, "instances.toml"), 'w',  encoding='utf-8') as f:
-		instances = {"dotminecraft": {"name": ".minecraft", "path": "~/.minecraft"}}
-		tomlkit.dump(instances, f)
+instances_file = config.get("instances-file", os.path.join(config_dir, "instances.ini"))
+if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.exists(instances_file):
+	with open(os.path.join(config_dir, "instances.toml"), "r") as f:
+		oldinstances = tomlkit.load(f)
+	instances = ConfigObj(unrepr=True)
+	instances.filename = instances_file
+	for value in oldinstances:
+		instances[value] = oldinstances[value]
+	instances.write()
+	os.remove(os.path.join(config_dir, "instances.toml"))
+elif not os.path.exists(instances_file):
+	instances = ConfigObj(unrepr=True)
+	instances["dotminecraft"] = {"name": ".minecraft", "path": "~/%AppData%/roaming/.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
+	instances.filename = instances_file
+	instances.write()
 else:
-	with open(os.path.join(config_dir, "instances.toml"), "r", encoding="utf-8") as f:
-		instances = tomlkit.load(f)
+	instances = ConfigObj(instances_file, unrepr=True)
 logger.info("instances %s", instances)
 
 cacheDir = config["cache-dir"]
@@ -132,27 +159,27 @@ if not os.path.exists(cacheDir):
 	os.makedirs(cacheDir)
 	os.makedirs(os.path.join(cacheDir, "mods"))
 
+class color:
+	NORMAL = "\033[0m"
+	INPUT = "\033[94m" if args["color"] or config.get("Color", False) else "\033[0m"
+	ERROR = "\033[91m" if args["color"] or config.get("Color", False) else "\033[0m"
+
 if args["operation"] != "instance":
-	selected_instance = config["selected-instance"]
-	if selected_instance in instances.keys():
+	selected_instance = os.getenv("MCMMINSTANCE", config["selected-instance"])
+	if selected_instance in instances:
 		instance_dir = os.path.expanduser(instances[selected_instance]["path"])
 	else:
 		print("selected instance not found")
 		raise SystemExit
+	logger.info("selected instance: %s", selected_instance)
 
-	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.toml")):
+	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.ini")):
 		instanceFirstrun(instance_dir)
 
-	with open(os.path.join(instance_dir, "mcmodman_managed.toml"), "r", encoding="utf-8") as f:
-		instancecfg = tomlkit.load(f)
+	instancecfg = ConfigObj(os.path.join(instance_dir, "mcmodman_managed.ini"))
 	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 
 	logger.info("instance %s", instancecfg)
 
 	loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}
-
-class color:
-	NORMAL = "\033[0m"
-	INPUT = "\033[94m" if args["color"] or config.get("Color", False) else "\033[0m"
-	ERROR = "\033[91m" if args["color"] or config.get("Color", False) else "\033[0m"

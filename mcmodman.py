@@ -2,7 +2,7 @@
 main logic, and functions with front-end functionality
 """
 
-import logging, os, tomlkit, commons, cache, hangar, modrinth, indexing, instance, local
+import logging, os, commons, cache, hangar, modrinth, indexing, instance, local
 from typing import List # DEBUG
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ class ModType():
 	def __init__(self, slug: str, reason: str="explicit"):
 		self.slug = slug
 		self.api_data = {}
-		self.index = indexing.get(slug, reason)
+		self.index = indexing.get(slug, "explicit" if commons.args["asexplicit"] else "dependency" if commons.args["asdeps"] else reason)
 		if self.index is None:
 			raise TargetNotFoundError(slug)
 		if self.index.get("source") is not None:
@@ -23,7 +23,7 @@ class ModType():
 		return self.slug in commons.config["ignored-mods"]
 
 	def isDisabled(self) -> bool | None: # returns true if disabled, false if enabled and none if not installed
-		return True if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}")) else None
+		return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
@@ -36,8 +36,8 @@ class ModType():
 		else:
 			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}.disabled")
 		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
-		os.rename(currentpath, newpath)
 		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
+		os.rename(currentpath, newpath)
 
 def addMod():
 	slugs = [] + commons.args["slugs"]
@@ -62,7 +62,7 @@ def addMod():
 		if mod.source == "local":
 			mod.slug = mod.api_data["versions"][0]["slug"]
 			mod.index = indexing.get(mod.slug)
-		if mod.isDisabled():
+		if mod.isInstalled() and mod.isDisabled():
 			print(f"mod '{mod.slug}' is disabled, skipping")
 			toremove.append(mod)
 			continue
@@ -75,6 +75,8 @@ def addMod():
 			if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"]:
 				toremove.append(mod)
 				continue
+		if commons.args["explicit"]:
+			continue
 		for dependency in mod.api_data["versions"][0]["dependencies"]:
 			if dependency["project_id"] in checked:
 				continue
@@ -95,10 +97,9 @@ def addMod():
 
 	for mod in mods:
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
-		if mod.slug in ["connector", "cardboard"] and commons.instancecfg["translation-layer"] == "None":
+		if mod.slug in ["connector", "cardboard"]:
 			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				tomlkit.dump(commons.instancecfg, f)
+			commons.instancecfg.write()
 		sources[mod.source].getMod(mod.slug, mod.api_data)
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
 		indexing.mcmm(mod.slug, mod.api_data, mod.index['reason'], mod.source)
@@ -122,11 +123,12 @@ def removeMod(slugs=None):
 	for mod in mods:
 		if mod.slug in ("cardboard", "connector"):
 			commons.instancecfg["translation-layer"] = "None"
-			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				tomlkit.dump(commons.instancecfg, f)
-		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] if not mod.isDisabled else f"{mod.index["filename"]}.disabled")):
-			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] if not mod.isDisabled else f"{mod.index["filename"]}.disabled"))
-		os.remove(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.toml"))
+			commons.instancecfg.write()
+		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
+			os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
+		elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
+			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
+		_ = os.remove(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
 		logger.info("Removed content '%s'", mod.slug)
 		if "index-compatibility" in commons.instancecfg and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
 			os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
@@ -153,8 +155,8 @@ def queryMod(slugs=None):
 	if not slugs:
 		installed = []
 		for file in os.listdir(os.path.join(commons.instance_dir, ".content")):
-			if ".mm.toml" in file:
-				index = indexing.get(file[:-8])
+			if ".mm.toml" in file or ".mm.ini" in file:
+				index = indexing.get(file[:file.find(".")])
 				if commons.args["all"]:
 					pass
 				elif (commons.args["explicit"] and index["reason"] != "explicit") or (commons.args["dependency"] and index["reason"] != "dependency") or (commons.args["optional"] and index["reason"] != "optional"):
@@ -166,14 +168,12 @@ def queryMod(slugs=None):
 		return installed
 	if isinstance(slugs, list):
 		for slug in slugs:
-			if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")):
-				with open(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml"), "r", encoding="utf-8") as f:
-					index = tomlkit.load(f)
+			index = indexing.get(slug)
+			if index != None:
 				print(f"{slug} {index['version']}")
 				logger.info("Found mod %s (%s) version %s (%s)", slug, index.get("mod-id"), index['version'], index['version-id'])
 			else:
-				if commons.args["operation"] == "query":
-					print(f"Mod '{slug}' was not found")
+				print(f"Mod '{slug}' was not found\n" if commons.args["operation"] == "query" else "", end="")
 				logger.info("Couldnt find index for mod %s", {slug})
 	return None
 
@@ -252,8 +252,7 @@ def downgradeMod():
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
 		if mod.slug in ["connector", "cardboard"]:
 			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			with open(os.path.join(commons.instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-				tomlkit.dump(commons.instancecfg, f)
+			commons.instancecfg.write()
 
 		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(mod.slug, mod.api_data)
 		indexing.mcmm(mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
@@ -267,9 +266,7 @@ def ignoreMod(slugs=None):
 	for slug in slugs:
 		commons.config["ignored-mods"].append(slug)
 	commons.config["ignored-mods"] = list(set(commons.config["ignored-mods"]))
-
-	with open(os.path.join(commons.config_dir, "config.toml"), "w", encoding="utf-8") as f:
-		tomlkit.dump(commons.config, f)
+	commons.config.write()
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -359,6 +356,7 @@ if __name__ == "__main__":
 	except RuntimeError as e:
 		print(f"{commons.color.ERROR}An error occurred while running mcmodman{commons.color.NORMAL}")
 		logger.critical(e)
+		raise
 	except Exception as e: # allows for removing the lock file when an unhandled error occurs
 		print(f"{commons.color.ERROR}An unexpected error occured, {e}{commons.color.NORMAL}")
 		logger.critical(e)

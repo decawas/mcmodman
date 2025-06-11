@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install -U cxfreeze appdirs tomlkit requests pyyaml
+      - run: pip install -U cxfreeze appdirs configobj tomlkit requests pyyaml
       - run: python setup.py build
       - run: tar czfC dist/mcmodman_linux_x86_64.tar.gz dist .
       - uses: actions/upload-artifact@v4
@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install -U cxfreeze appdirs tomlkit requests pyyaml
+      - run: pip install -U cxfreeze appdirs configobj tomlkit requests pyyaml
       - run: python setup.py build
       - run: tar czfC dist/mcmodman_macos_aarch64.tar.gz dist .
       - uses: actions/upload-artifact@v4
@@ -50,7 +50,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install -U cxfreeze appdirs tomlkit requests pyyaml
+      - run: pip install -U cxfreeze appdirs configobj tomlkit requests pyyaml
       - run: python setup.py build
       - run: Compress-Archive -Path dist/* -DestinationPath dist/mcmodman_windows_x86_64.zip
       - uses: actions/upload-artifact@v4

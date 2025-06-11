@@ -2,14 +2,15 @@
 Instance management functions for mcmodman
 """
 from pathlib import Path
-import os, re, json, logging, tomlkit, appdirs
+import os, re, json, logging, appdirs
+from configobj import ConfigObj
 import commons
 
 logger = logging.getLogger(__name__)
 
 def instanceFirstrun(instance_dir):
 	"""Initialize a new instance with the necessary configuration."""
-	managefile = {}
+	managefile = ConfigObj()
 	if not any([os.path.exists(os.path.expanduser(os.path.join(instance_dir, "options.txt"))), os.path.exists(os.path.expanduser(os.path.join(instance_dir, "server.properties"))), os.path.exists(os.path.expanduser(os.path.join(instance_dir, "level.dat")))]):
 		print("error: selected instance does not appear to be a minecraft instance")
 		raise SystemExit
@@ -70,8 +71,8 @@ def instanceFirstrun(instance_dir):
 
 	managefile["loader"] = loaders[0]
 
-	managefile["type"] = "server" if os.path.exists(f"{instance_dir}/server.properties") else "client" if os.path.exists(f"{instance_dir}/options.txt") else "world" if os.path.exists(f"{instance_dir}/level.dat") else None
-	if managefile["type"] is None:
+	managefile["type"] = "server" if os.path.exists(os.path.join(instance_dir, "server.properties")) else "client" if os.path.exists(os.path.join(instance_dir, "options.txt")) else "world" if os.path.exists(os.path.join(instance_dir, "level.dat")) else "unknown"
+	if managefile["type"] == "unknown":
 		print("Could not determine instance type")
 		raise RuntimeError("Could not determine instance type")
 
@@ -80,9 +81,8 @@ def instanceFirstrun(instance_dir):
 	else:
 		raise RuntimeError("mcmodman could not find a minecraft version")
 
-	with open(os.path.join(instance_dir, "mcmodman_managed.toml"), "w", encoding="utf-8") as f:
-		tomlkit.dump(managefile, f)
-		logger.info("writing mcmodman_managed.toml to instance")
+	managefile.filename = os.path.join(instance_dir, "mcmodman_managed.ini")
+	managefile.write()
 
 	if not os.path.exists(os.path.join(instance_dir, ".content")):
 		os.makedirs(os.path.join(instance_dir, ".content"))
@@ -116,14 +116,12 @@ def instanceMeta():
 			return
 
 		commons.instances[commons.args["name"]] = {"name": commons.args["name"], "path": commons.args["path"]}
-		with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
-			tomlkit.dump(commons.instances, f)
+		commons.instances.write()
 		print(f"Added instance '{commons.args['name']}'")
 	if commons.args["suboperation"] == "select":
 		if commons.args["name"] in commons.instances:
 			commons.config["selected-instance"] = commons.args["name"]
-			with open(os.path.join(commons.config_dir, "config.toml"), 'w', encoding='utf-8') as f:
-				tomlkit.dump(commons.config, f)
+			commons.config.write()
 			print(f"Selected instance '{commons.args['name']}'")
 			return
 		print(f"Instance '{commons.args['name']}' not found")
@@ -134,8 +132,7 @@ def instanceMeta():
 		for i, instance in enumerate(commons.config["instances"]):
 			if instance["name"] == commons.args["name"]:
 				del commons.config["instances"][i]
-				with open(os.path.join(commons.config_dir, "instances.toml"), 'w', encoding='utf-8') as f:
-					tomlkit.dump(commons.instances, f)
+				commons.instances.write()
 				print(f"Deleted instance '{commons.args['name']}'")
 				return
 		print(f"Instance '{commons.args['name']}' not found")

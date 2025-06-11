@@ -48,9 +48,11 @@ def getMod(slug: str, mod_data: dict) -> None:
 
 	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 
+
+
 def parseAPI(apiData: dict) -> list:
 	matchesbychannel = {"release": [], "snapshot": [], "alpha": [], "translation": []}
-	for version in apiData["versions"]["result"]:
+	for version in apiData["versions"]:
 		if commons.minecraft_version in version["platformDependencies"]["PAPER"]:
 			version["folder"] = "plugins"
 			version["source"] = "hangar"
@@ -84,7 +86,7 @@ def getAPI(slug: str, depcheck: bool = False) -> dict:
 		url = f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25"
 		response = get(url, timeout=30)
 		response.raise_for_status()
-		modData["versions"] = response.json()
+		modData["versions"] = response.json()["result"]
 
 		cache.setAPICache(slug, modData, "hangar")
 

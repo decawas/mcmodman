@@ -6,7 +6,7 @@ import sys
 build_options = {
     'packages': [],
     'excludes': [],
-    'include_files': [('dataversion.json', 'dataversion.json'), ('config-template.toml', 'config-template.toml')],
+    'include_files': [('dataversion.json', 'dataversion.json'), ('config-template.ini', 'config-template.ini')],
     'optimize': 2,
 }
 
