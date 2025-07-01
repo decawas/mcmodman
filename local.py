@@ -11,7 +11,7 @@ def getMod(slug: str, modData: dict):
 
 def parseAPI(modData: dict) -> list:
 	modData["versions"] = [""]
-	modData["versions"][0] = {"slug": os.path.basename(modData["filename"]), "dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
+	modData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
 	if modData["from"] == "pack.mcmeta":
 		modData["versions"][0]["id"] = "Unknown"
 		modData["versions"][0]["version_number"] = "Unknown"
@@ -22,12 +22,11 @@ def parseAPI(modData: dict) -> list:
 	elif modData["from"] == "fabric.mod.json":
 		modData["versions"][0]["id"] = modData["version"]
 		modData["versions"][0]["version_number"] = modData["version"]
-		modData["versions"][0]["slug"] = modData["id"]
+		modData["versions"][0]["slug"] = modData["slug"]
 	elif modData["from"] == "plugin.yml":
 		modData["versions"][0]["id"] = modData["version"]
 		modData["versions"][0]["version_number"] = modData["version"]
 		modData["versions"][0]["slug"] = modData["name"]
-
 	return modData["versions"]
 
 def getAPI(filename: str) -> dict:
@@ -38,6 +37,7 @@ def getAPI(filename: str) -> dict:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "mod"
 			modData["from"] = "fabric.mod.json"
+			modData["slug"] = modData["id"]
 		elif "META-INF/mods.toml" in moddir:
 			with mod.open('META-INF/mods.toml') as data:
 				modData = tomlkit.loads(data.read().decode("utf-8"))
