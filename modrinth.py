@@ -12,12 +12,10 @@ if not os.path.exists(os.path.join(commons.cacheDir, "modrinth-api")):
 	os.makedirs(os.path.join(commons.cacheDir, "modrinth-api"))
 
 def getMod(slug: str, mod_data: dict) -> None:
-	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version):
-		print(f"Using cached version for mod '{slug}'")
-		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
+	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"]):
+		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 		return
 
-	print(f"Downloading mod '{slug}'")
 	url = f"{mod_data['versions'][0]['files'][0]['url']}"
 	response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 	logger.info('Modrinth returned headers %s', response.headers)
@@ -44,7 +42,7 @@ def getMod(slug: str, mod_data: dict) -> None:
 			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
 			raise ChecksumError
 
-	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data["versions"][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
+	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data["versions"][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 
 def parseAPI(api_data: dict) -> list:
 	ptype, folder = projectGetType(api_data)
@@ -68,13 +66,13 @@ def parseAPI(api_data: dict) -> list:
 		version["source"] = "modrinth"
 		version["date"] = version["date_published"]
 		version["type"] = ptype
-		if commons.minecraft_version in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
-			version["folder"] = folder
+		if commons.instancecfg["version"] in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+			version["folder"] = os.path.basename(folder)
 			matchesbychannel[version["version_type"]].append(version)
-		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif commons.instancecfg["version"] in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "plugins"
 			matchesbychannel["translation"].append(version)
-		elif commons.minecraft_version in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif commons.instancecfg["version"] in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
 	matches = matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
@@ -90,7 +88,6 @@ def getAPI(slug: str, depcheck: bool = False) -> dict:
 
 	if "modData" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
-		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='')
 		url = f"https://api.modrinth.com/v2/project/{slug}"
 		try:
 			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)

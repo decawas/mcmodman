@@ -34,6 +34,7 @@ def parse_args():
 	parser.add_argument("-p", "--optional", action="store_true", help="Optional")
 	parser.add_argument("-y", "--noconfirm", action="store_true", help="Skip the confirmation dialogue, does not skip the ignore question in downgrade")
 	parser.add_argument("-c", "--color", action="store_true", help="Enable colour output")
+	parser.add_argument("-i", "--info", action="store_true", help="Display information for a given mod")
 	parser.add_argument("slugs", nargs="*", help="Mod slugs to operate on")
 
 	try:
@@ -86,6 +87,7 @@ def parse_args():
 	result["color"] = args.color
 	result["asexplicit"] = args.asexplicit
 	result["asdeps"] = args.asdeps
+	result["info"] = args.info
 	result["lock"] = result.get("operation") in ["sync", "update", "remove", "toggle", "downgrade"]
 	return result
 
@@ -176,7 +178,6 @@ if args["operation"] != "instance":
 
 	instancecfg = ConfigObj(os.path.join(instance_dir, "mcmodman_managed.ini"), unrepr=True) if os.path.exists(os.path.join(instance_dir, "mcmodman_managed.ini")) else instanceFirstrun()
 	mod_loader = instancecfg["loader"]
-	minecraft_version = instancecfg["version"]
 
 	logger.info("instance %s", instancecfg)
 

@@ -2,7 +2,7 @@
 main logic, and functions with front-end functionality
 """
 
-import logging, os, commons, cache, hangar, modrinth, indexing, instance, local
+import logging, os, tqdm, commons, cache, hangar, modrinth, indexing, instance, local
 from typing import List # DEBUG
 
 logger = logging.getLogger(__name__)
@@ -32,24 +32,30 @@ class ModType():
 		if self.index["version"] == "None": # if not installed, raise target not found
 			raise TargetNotFoundError(self.slug)
 		if self.isDisabled():
-			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}")
+			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}")
 		else:
-			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index["filename"]}.disabled")
+			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled")
 		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
 		os.rename(currentpath, newpath)
+	
+	@staticmethod
+	def modInstalled(slug):
+		return True if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini")) or os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")) else False
 
 def addMod():
 	slugs = [] + commons.args["slugs"]
 	if commons.args["all"]:
-		slugs.extend(queryMod())
+		slugs.extend(listAll())
 	if not slugs:
 		raise NoTargetsError
 	slugs = list(set(slugs))
 	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in commons.config["ignored-mods"]]
 
 	i, toremove, checked = -1, [], []
+	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
 	while i < len(mods) - 1:
+		progress.update(1)
 		i += 1
 		mod = mods[i]
 		mod.api_data = sources[mod.source].getAPI(mod.slug)
@@ -63,15 +69,14 @@ def addMod():
 			mod.slug = mod.api_data["versions"][0]["slug"]
 			mod.index = indexing.get(mod.slug)
 		if mod.isInstalled() and mod.isDisabled():
-			print(f"mod '{mod.slug}' is disabled, skipping")
+			progress.write(f"mod '{mod.slug}' is disabled, skipping")
 			toremove.append(mod)
 			continue
 		if isinstance(mod.api_data["versions"], str):
-			print(f"No suitable version found for mod '{mod.slug}'")
 			toremove.append(mod)
 			continue
 		elif mod.api_data["versions"][0]["id"] == mod.index["version-id"]:
-			print(f"Mod '{mod.slug}' already up to date, {'skipping' if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"] else 'reinstalling'}")
+			progress.write(f"Mod '{mod.slug}' already up to date, {'skipping' if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"] else 'reinstalling'}")
 			if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"]:
 				toremove.append(mod)
 				continue
@@ -82,10 +87,13 @@ def addMod():
 				continue
 			dep_api_data = sources[mod.source].getAPI(dependency["project_id"], depcheck=True)
 			reason = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
-			print(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}' ({"required" if reason == "dependency" else reason})")
+			progress.write(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}' ({"required" if reason == "dependency" else reason})\n" if not ModType.modInstalled(dep_api_data['slug']) else "", end="")
 			checked.append(dependency["project_id"])
 			if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"] or commons.args["optional"]:
 				mods.append(ModType(dep_api_data['slug'], reason))
+			progress.total = len(mods)
+			progress.refresh()
+	progress.close()
 
 	for mod in toremove:
 		mods.remove(mod)
@@ -95,6 +103,7 @@ def addMod():
 
 	_ = "" if commons.args["noconfirm"] else confirm(mods)
 
+	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
 		if mod.slug in ["connector", "cardboard"]:
@@ -103,6 +112,8 @@ def addMod():
 		sources[mod.source].getMod(mod.slug, mod.api_data)
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
 		indexing.mcmm(mod.slug, mod.api_data, mod.index['reason'], mod.source)
+		progress.update(1)
+	progress.close()
 
 def removeMod(slugs=None):
 	if slugs is None:
@@ -146,36 +157,41 @@ def confirm(mods: List[ModType]):
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
 	yn = input(f"\n{commons.color.INPUT}::{commons.color.NORMAL} Proceed with download? [Y/n]: ")
 	print("")
-	if yn.lower() != 'y' and yn != '':
+	if yn.lower() not in ["y", "", "yes"]:
 		logger.error("User declined %s", op)
 		raise SystemExit
 
-def queryMod(slugs=None):
-	slugs = None if commons.args["all"] else commons.args["slugs"] if slugs is None else slugs
-	if not slugs:
-		installed = []
-		for file in os.listdir(os.path.join(commons.instance_dir, ".content")):
-			if ".mm.toml" in file or ".mm.ini" in file:
-				index = indexing.get(file[:file.find(".")])
-				if commons.args["all"]:
-					pass
-				elif (commons.args["explicit"] and index["reason"] != "explicit") or (commons.args["dependency"] and index["reason"] != "dependency") or (commons.args["optional"] and index["reason"] != "optional"):
-					continue
-				if commons.args["operation"] == "query":
-					print(index["slug"], index["version"])
-				logger.info("Found mod %s", file)
-				installed.append(index["slug"])
-		return installed
-	if isinstance(slugs, list):
-		for slug in slugs:
-			index = indexing.get(slug)
-			if index != None:
-				print(f"{slug} {index['version']}")
-				logger.info("Found mod %s (%s) version %s (%s)", slug, index.get("mod-id"), index['version'], index['version-id'])
-			else:
-				print(f"Mod '{slug}' was not found\n" if commons.args["operation"] == "query" else "", end="")
-				logger.info("Couldnt find index for mod %s", {slug})
-	return None
+def queryMod():
+	slugs = listAll() if not commons.args["slugs"] else commons.args["slugs"]
+	mods = [ModType(slug) for slug in slugs]
+	for mod in mods:
+		if not mod.isInstalled():
+			print(f"mod {mod.slug} is not installed")
+			continue
+		if commons.args["explicit"] and mod.index["reason"] != "explicit":
+			continue
+		if commons.args["dependency"] and mod.index["reason"] != "dependency":
+			continue
+		if commons.args["optional"] and mod.index["reason"] != "optional":
+			continue
+		if not commons.args["info"]:
+			print(f"{mod.slug} {mod.index['version']}")
+		else:
+			print(f"Name{':'.rjust(13, ' ')} {mod.slug}")
+			print(f"Version{':'.rjust(10, ' ')} {mod.index["version"]}")
+			print(f"Source{':'.rjust(11, ' ')} {mod.index["source"]}")
+			print(f"Description{':'.rjust(6, ' ')} {mod.index["description"]}\n" if "description" in mod.index else "", end="")
+			print(f"Loader{':'.rjust(11, ' ')} {mod.index["loader"]}\n" if "loader" in mod.index else "", end="")
+			print(f"Installed Size{':'.rjust(3, ' ')} {convertBytes(mod.index["filesize"])}\n" if "filesize" in mod.index else "", end="")
+			print(f"Install Date{':'.rjust(5, ' ')} {mod.index["date"]}\n" if "date" in mod.index else "", end="")
+			print(f"Install Reason{':'.rjust(3, ' ')} {mod.index["reason"]}")
+			print("")
+
+def listAll() -> list:
+	ls = []
+	for file in os.listdir(os.path.join(commons.instance_dir, ".content")):
+		ls.append(file[:-8] if file.endswith(".mm.toml") else file[:-7])
+	return ls
 
 def toggleMod():
 	slugs = commons.args["slugs"]
@@ -198,8 +214,8 @@ def searchMod():
 	queryData["all"].extend(queryData["hangar"]["hits"])
 	queryData["all"].sort(key=lambda x: x["downloads"])
 	for hit in queryData["all"]:
-		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, commons.minecraft_version, commons.mod_loader)
-		print(f"{hit['source']}/{hit['slug']} by {hit['author']} {'[Installed]' if queryMod(hit['slug']) else ''}")
+		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, commons.instancecfg["version"], commons.mod_loader)
+		print(f"{hit['source']}/{hit['slug']} by {hit['author']} {'[Installed]' if ModType.modInstalled(hit['slug']) else ''}")
 		print(f"\t{hit['description'].splitlines()[0]}")
 
 def downgradeMod():
@@ -224,7 +240,7 @@ def downgradeMod():
 		mod.api_data["versions"] = sorted(versions, key=lambda x: x['date'], reverse=True)
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
-			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(mod.slug, commons.mod_loader, version['version_number'], commons.minecraft_version) else ''
+			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(mod.slug, commons.mod_loader, version['version_number'], commons.instancecfg["version"]) else ''
 			print(f"  {len(mod.api_data['versions']) - i - 1})\t{version["source"]}/{mod.slug}\t{version['version_number']}\t{suffix}")
 
 		choice = input(f"{commons.color.INPUT}::{commons.color.NORMAL} Choose version: ")
@@ -245,6 +261,7 @@ def downgradeMod():
 	_ = "" if commons.args["noconfirm"] else confirm(mods)
 
 	toignore = []
+	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
 		ignore =  input(f"{commons.color.INPUT}::{commons.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 		if ignore == "y":
@@ -256,8 +273,10 @@ def downgradeMod():
 
 		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(mod.slug, mod.api_data)
 		indexing.mcmm(mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
-		cache.setModCache(mod.slug, commons.mod_loader, mod.api_data["versions"][0]['version_number'], commons.minecraft_version, mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
+		cache.setModCache(mod.slug, commons.mod_loader, mod.api_data["versions"][0]['version_number'], commons.instancecfg["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
 		print(f"Mod '{mod.slug}' successfully updated")
+		progress.update(1)
+	progress.close()
 
 	ignoreMod(toignore)
 
@@ -315,21 +334,22 @@ class sourceagnostic:
 		for s in apiData:
 			if isinstance(apiData[s], dict):
 				return apiData[s]
+		return None
+
+sources = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
 if __name__ == "__main__":
 	try:
 		if commons.args["lock"]:
-			try:
+			if not os.path.exists(os.path.join(commons.instance_dir, "mcmodman.lock")):
 				fd = os.open(os.path.join(commons.instance_dir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 				with os.fdopen(fd, 'w', encoding='utf-8') as f:
 					f.write("lock")
 					logger.info("Setting lock")
-			except FileExistsError:
+			else:
 				print("mcmodman is already running for this instance")
 				logger.info("mcmodman.lock file already exists, exiting")
 				raise LockExistsError("mcmodman is already running for this instance")
-
-		sources = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda: print(commons.__version__)}

@@ -1,7 +1,7 @@
 """
 handles indexing for content
 """
-import logging, os, tomlkit, commons
+import logging, os, tomlkit, time, commons
 from configobj import ConfigObj
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ def mcmm(slug, mod_data, reason="explicit", source="local"):
 	print(f"Indexing mod '{slug}'")
 
 	index = ConfigObj(unrepr=True)
-	index['index-version'] = 3
+	index['index-version'] = 4
 	index['filename'] = mod_data['versions'][0]['files'][0]['filename']
 	index['slug'] = slug
 	index['mod-id'] = mod_data.get("id") or mod_data.get("projectID")
@@ -21,15 +21,22 @@ def mcmm(slug, mod_data, reason="explicit", source="local"):
 	index['type'] = mod_data['versions'][0].get("type", "")
 	index['folder'] = os.path.expanduser(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"]))
 	index['source'] = source
-	index['game-version'] = commons.minecraft_version
+	index['game-version'] = commons.instancecfg["version"]
+	index['description'] = mod_data["description"]
+	if source == "modrinth":
+		index['loader'] = mod_data['versions'][0]["loaders"][0] if commons.mod_loader not in mod_data['versions'][0]["loaders"] else commons.mod_loader
+	elif source == "hangar":
+		index['loader'] = commons.instancecfg["loader"]
+	index['filesize'] = mod_data['versions'][0]['files'][0]["size"]
+	index['date'] = time.ctime()
 	index['reason'] = reason
 
 	index.filename = os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini")
 	index.write()
 	logger.debug("index %s for mod '%s' written to %s", dict(index), slug, index.filename)
 
-	if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source != "local":
-		packwiz(slug, mod_data)
+	#if "index-compatibility" in commons.instancecfg and commons.instancecfg["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source != "local":
+	#	packwiz(slug, mod_data)
 
 def packwiz(slug, mod_data):
 	if not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], ".index"))):

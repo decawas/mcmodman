@@ -12,9 +12,9 @@ if not os.path.exists(os.path.join(commons.cacheDir, "hangar-api")):
 	os.makedirs(os.path.join(commons.cacheDir, "hangar-api"))
 
 def getMod(slug: str, mod_data: dict) -> None:
-	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version):
+	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"]):
 		print(f"Using cached version for plugin '{slug}'")
-		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
+		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 		return
 
 	print(f"Downloading plugin '{slug}'")
@@ -46,14 +46,12 @@ def getMod(slug: str, mod_data: dict) -> None:
 	elif perfcheck:
 		print(f"warning: could not verify mod {slug}, no checksum provided")
 
-	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.minecraft_version, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
-
-
+	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
 
 def parseAPI(apiData: dict) -> list:
 	matchesbychannel = {"release": [], "snapshot": [], "alpha": [], "translation": []}
 	for version in apiData["versions"]:
-		if commons.minecraft_version in version["platformDependencies"]["PAPER"]:
+		if commons.instancecfg["version"] in version["platformDependencies"]["PAPER"]:
 			version["folder"] = "plugins"
 			version["source"] = "hangar"
 			versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "dependencies": [], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
@@ -76,7 +74,6 @@ def getAPI(slug: str, depcheck: bool = False) -> dict:
 
 	if "modData" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from hangar", slug, slug)
-		print(f"Fetching api data for mod '{slug}'\n" if not depcheck else "", end='')
 
 		url = f"https://hangar.papermc.io/api/v1/projects/{slug}"
 		response = get(url, timeout=30)
@@ -102,7 +99,7 @@ def searchAPI(query: str) -> dict:
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying hangar with query '{query}'")
-		url = f"https://hangar.papermc.io/api/v1/projects?sort=downloads&platform=paper&q={query.replace(' ', '+')}&version={commons.minecraft_version}"
+		url = f"https://hangar.papermc.io/api/v1/projects?sort=downloads&platform=paper&q={query.replace(' ', '+')}&version={commons.instancecfg["version"]}"
 		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 		response.raise_for_status()
 		queryData = response.json()
