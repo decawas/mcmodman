@@ -3,7 +3,7 @@ defines common variables, and meta-instance functions
 """
 import argparse
 import logging, os, sys, appdirs, tomlkit
-from configobj import ConfigObj, validate
+from configobj import ConfigObj
 from instance import instanceFirstrun
 
 __version__ = "25.21"
@@ -151,6 +151,7 @@ elif not os.path.exists(instances_file):
 	instances.write()
 else:
 	instances = ConfigObj(instances_file, unrepr=True)
+
 logger.info("instances %s", instances)
 
 cacheDir = config["cache-dir"]
@@ -173,10 +174,7 @@ if args["operation"] != "instance":
 		raise SystemExit
 	logger.info("selected instance: %s", selected_instance)
 
-	if not os.path.exists(os.path.join(instance_dir, "mcmodman_managed.ini")):
-		instanceFirstrun(instance_dir)
-
-	instancecfg = ConfigObj(os.path.join(instance_dir, "mcmodman_managed.ini"))
+	instancecfg = ConfigObj(os.path.join(instance_dir, "mcmodman_managed.ini"), unrepr=True) if os.path.exists(os.path.join(instance_dir, "mcmodman_managed.ini")) else instanceFirstrun()
 	mod_loader = instancecfg["loader"]
 	minecraft_version = instancecfg["version"]
 

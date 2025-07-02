@@ -2,93 +2,103 @@
 Instance management functions for mcmodman
 """
 from pathlib import Path
-import os, re, json, logging, appdirs
+import os, re, json, logging, appdirs, requests
 from configobj import ConfigObj
-import commons
+import commons, cache
 
 logger = logging.getLogger(__name__)
 
-def instanceFirstrun(instance_dir):
-	"""Initialize a new instance with the necessary configuration."""
-	managefile = ConfigObj()
-	if not any([os.path.exists(os.path.expanduser(os.path.join(instance_dir, "options.txt"))), os.path.exists(os.path.expanduser(os.path.join(instance_dir, "server.properties"))), os.path.exists(os.path.expanduser(os.path.join(instance_dir, "level.dat")))]):
-		print("error: selected instance does not appear to be a minecraft instance")
-		raise SystemExit
-	if os.path.exists(os.path.expanduser(os.path.join(instance_dir, "logs", "latest.log"))):
-		with open(os.path.expanduser(os.path.join(instance_dir, "logs", "latest.log")), "r", encoding="utf-8") as f:
+def instanceFirstrun():
+	instance = ConfigObj(unrepr=True)
+	if os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "options.txt"))):
+		instance["type"] = "client"
+		instance["modfolder"] = "mods"
+		with open(os.path.expanduser(os.path.join(commons.instance_dir, "logs", "latest.log")), "r", encoding="utf-8") as f:
 			log = f.read()
-		loaders = []
-		loader_detector = {
-			"quilt": {"detect": lambda: os.path.exists(f"{instance_dir}/config/quilt-loader.txt"), "version_detect": r"Minecraft (\d+(?:\.\d+)*) with"},
-			"neoforge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/neoforge-client.toml") or os.path.exists(f"{instance_dir}/config/neoforge-server.toml"), "version_detect": r"--version, (\d+(?:\.\d+)*),"},
-			"fabric": {"detect": lambda: os.path.exists(f"{instance_dir}/.fabric"), "version_detect": r"Minecraft (\d+(?:\.\d+)*) with"},
-			"forge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/forge-client.toml") or os.path.exists(f"{instance_dir}/config/forge-server.toml"), "version_detect": r"--version, (\d+(?:\.\d+)*),"},
-			"liteloader": {"detect": lambda: os.path.exists(f"{instance_dir}/config/liteconfig"), "version_detect": r"LiteLoader (\d+(?:\.\d+)*)\n"},
-			"purpur": {"detect": lambda: re.search(r"Purpur (\d+(?:\.\d+)*)-", str(log)) is not None, "version_detect": r"Purpur (\d+(?:\.\d+)*)-"},
-			"folia": {"detect": lambda: re.search(r"Folia version (\d+(?:\.\d+)*)-", str(log)) is not None, "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
-			"paper": {"detect": lambda: os.path.exists(f"{instance_dir}/config/paper-global.yml"), "version_detect": r"Paper (\d+(?:\.\d+)*)-"},
-			"spigot": {"detect": lambda: os.path.exists(f"{instance_dir}/spigot.yml"), "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
-			"bukkit": {"detect": lambda: os.path.exists(f"{instance_dir}/bukkit.yml"), "version_detect": r"server version (\d+(?:\.\d+)*)\n"},
-			"sponge": {"detect": lambda: os.path.exists(f"{instance_dir}/config/sponge/sponge.conf"), "version_detect": r"spongevanilla-(\d+(?:\.\d+)*)-"}
-		}
-
-		for loader, det in loader_detector.items():
-			if det["detect"]():
-				loaders.append(loader)
-				match = re.search(det["version_detect"], log)
-				break
-		logger.info("Found loaders %s", ", ".join(loaders))
-			
-		if len(loaders) > 1 and loaders[0] not in ["folia", "purper", "paper", "spigot"]:
-			print("mcmodman does not support instances with multiple loaders")
-			raise RuntimeError("mcmodman does not support instances with multiple loaders")
-		if not loaders:
-			print("Could not find any mod loaders for this instance\nif you are using Rift or RML you will have to manually set that")
-			loaders = ["vanilla"]
-			match = []
-
-		managefile["modfolder"] = "plugins" if re.search(loaders[0], "purpur,folia,paper,spigot,bukkit") is not None else "mods"
-
-		managefile["index-compatibility"] = compdetect(instance_dir)
-	elif os.path.exists(os.path.expanduser(os.path.join(instance_dir, "level.dat"))):
-		advancements = sorted(Path(os.path.expanduser(os.path.join(instance_dir, "advancements"))).iterdir(), key=os.path.getmtime)
+		instance["loader"], instance["version"] = loaderdetect(log)
+	elif os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "server.properties"))):
+		instance["type"] = "server"
+		with open(os.path.expanduser(os.path.join(commons.instance_dir, "logs", "latest.log")), "r", encoding="utf-8") as f:
+			log = f.read()
+		instance["loader"], instance["version"] = loaderdetect(log)
+		instance["modfolder"] = "plugins" if instance["loader"] in ["folia", "purpur", "paper", "spigot", "bukkit"] else "mods"
+	elif os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "level.dat"))):
+		instance["type"] = "world"
+		instance["loader"] = "datapack"
+		instance["modfolder"] = "datapacks"
+		cacheData = cache.getAPICache("versiondata.ini", "./")
+		if cacheData:
+			versionData = cacheData["api"]
+		else:
+			response = requests.get("https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json", timeout=30)
+			response.raise_for_status()
+			versionData = response.json()
+			cache.setAPICache("versiondata.ini", versionData, "./")
+		advancements = sorted(Path(os.path.expanduser(os.path.join(commons.instance_dir, "advancements"))).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
-			log = json.loads(f.read())
-		with open(os.path.join(commons.exe_path, "dataversion.json"), "r", encoding="utf-8") as f:
-			dataversions = json.loads(f.read())
-
-		if "DataVersion" not in log or log["DataVersion"] < 1444:
+			advancements = json.loads(f.read())
+		if "DataVersion" not in advancements or advancements["DataVersion"] < 1444:
 			print("This world is too old, please upgrade to a more recent version to use datapacks")
 			logger.warning("This world is too old, please upgrade to a more recent version to use datapacks")
 			raise SystemExit
-
-		loaders = ["datapack"]
-		match = dataversions[0][str(log["DataVersion"])]
-		managefile["modfolder"] = "datapacks"
+		for version in versionData:
+			if version["dataVersion"] == advancements["DataVersion"]:
+				instance["version"] = version["minecraftVersion"]
+				break
 	else:
+		print("error: selected instance does not appear to be a minecraft instance")
+	if instance["type"] != "world" and not os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "logs", "latest.log"))):
 		print("instance must be run at least once before using mcmodman")
+	
+	instance["index-compatibility"] = compdetect(commons.instance_dir)
+	
+	instance.filename = os.path.join(commons.instance_dir, "mcmodman_managed.ini")
+	instance.write()
+	return instance
+
+def loaderdetect(log):
+	if os.path.exists(os.path.join(commons.instance_dir, "config", "quilt-loader.txt")):
+		loader = "quilt"
+		versionmatch = r"Minecraft (\d+(?:\.\d+)*) with"
+	elif os.path.exists(os.path.join(commons.instance_dir, ".fabric")):
+		loader = "fabric"
+		versionmatch = r"Minecraft (\d+(?:\.\d+)*) with"
+	elif os.path.exists(os.path.join(commons.instance_dir, "config", "sponge")):
+		loader = "sponge"
+		versionmatch = r"spongevanilla-(\d+(?:\.\d+)*)-"
+	elif os.path.exists(os.path.join(commons.instance_dir, "config", "neoforge-client.toml")) or os.path.exists(os.path.join(commons.instance_dir, "config", "neoforge-server.toml")):
+		loader = "neoforge"
+		versionmatch = r"--version, (\d+(?:\.\d+)*),"
+	elif os.path.exists(os.path.join(commons.instance_dir, "config", "forge-client.toml")) or os.path.exists(os.path.join(commons.instance_dir, "config", "forge-server.toml")):
+		loader = "forge"
+		versionmatch = r"--version, (\d+(?:\.\d+)*),"
+	elif os.path.exists(os.path.join(commons.instance_dir, "config", "liteconfig")):
+		loader = "liteloader"
+		versionmatch = r"LiteLoader (\d+(?:\.\d+)*)\n"
+	elif re.search(r"Purpur (\d+(?:\.\d+)*)-", str(log)) is not None:
+		loader = "purpur"
+		versionmatch = r"Purpur (\d+(?:\.\d+)*)-"
+	elif re.search(r"Folia version (\d+(?:\.\d+)*)-", str(log)) is not None:
+		loader = "folia"
+		versionmatch = r"server version (\d+(?:\.\d+)*)\n"
+	elif os.path.exists(os.path.join(commons.instance_dir, "config", "paper-global.yml")):
+		loader = "paper"
+		versionmatch = r"Paper (\d+(?:\.\d+)*)-"
+	elif os.path.exists(os.path.join(commons.instance_dir, "spigot.yml")):
+		loader = "spigot"
+		versionmatch = r"server version (\d+(?:\.\d+)*)\n"
+	elif os.path.exists(os.path.join(commons.instance_dir, "bukkit.yml")):
+		loader = "bukkit"
+		versionmatch = r"server version (\d+(?:\.\d+)*)\n"
+	else:
+		print("Could not detect loader automatically")
 		raise SystemExit
 
-	managefile["loader"] = loaders[0]
+	match = re.search(versionmatch, log)
+	version = f"{match.group(1)}"
+	return loader, version
 
-	managefile["type"] = "server" if os.path.exists(os.path.join(instance_dir, "server.properties")) else "client" if os.path.exists(os.path.join(instance_dir, "options.txt")) else "world" if os.path.exists(os.path.join(instance_dir, "level.dat")) else "unknown"
-	if managefile["type"] == "unknown":
-		print("Could not determine instance type")
-		raise RuntimeError("Could not determine instance type")
-
-	if match:
-		managefile["version"] = f"{match.group(1)}" if not isinstance(match, str) else match
-	else:
-		raise RuntimeError("mcmodman could not find a minecraft version")
-
-	managefile.filename = os.path.join(instance_dir, "mcmodman_managed.ini")
-	managefile.write()
-
-	if not os.path.exists(os.path.join(instance_dir, ".content")):
-		os.makedirs(os.path.join(instance_dir, ".content"))
-	return managefile
-
-def compdetect(instanceDir):
+def compdetect(instanceDir) -> str:
 	"""Detect compatibility with launchers like MultiMC, PolyMC, etc."""
 	if os.path.exists(f"{instanceDir}/../instance.cfg"):
 		p = "Prism Launcher" if os.path.exists(f"{instanceDir}/../../../prismlauncher.cfg") else "PolyMC" if os.path.exists(f"{instanceDir}/../../../polymc.cfg") else "MultiMC"
@@ -98,7 +108,7 @@ def compdetect(instanceDir):
 		if prismcomp.lower() == "y" or prismcomp == "":
 			return "packwiz"
 
-	return None
+	return "None"
 
 def instanceMeta():
 	"""Handle instance management operations (add, select, remove, list)."""

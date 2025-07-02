@@ -10,7 +10,7 @@ APICACHEVERSION = 4
 
 def isAPICached(filename: str, source: str):
 	filename = filename.split(".")[0]
-	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.ini")
+	path = os.path.join(commons.cacheDir, f"{source}-api", f"{filename}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.ini") if not source.startswith("./") else os.path.join(commons.cacheDir, source, filename)
 	if not os.path.exists(path):
 		return False
 	cacheData = configobj.ConfigObj(path, unrepr=True, encoding='utf-8')
@@ -32,7 +32,7 @@ def getModCache(slug: str, loader: str, mod_version: str, game_version: str, fol
 	return True
  
 def setAPICache(slug: str, apiData: dict, source: str):
-	path = os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.ini")
+	path = os.path.join(commons.cacheDir, f"{source}-api", f"{slug}.{f'{source}query' if commons.args['operation'] == 'search' else 'mmcache'}.ini") if not source.startswith("./") else os.path.join(commons.cacheDir, source, slug)
 	cacheData = configobj.ConfigObj(unrepr=True, encoding='utf-8')
 	cacheData["time"] = time()
 	cacheData["api-cache-version"] = APICACHEVERSION
