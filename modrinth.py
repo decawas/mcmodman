@@ -4,85 +4,82 @@ modrinth api functions
 from hashlib import sha512
 import logging, os
 from requests import get, RequestException
-import cache, commons
+import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
 
-if not os.path.exists(os.path.join(commons.cacheDir, "modrinth-api")):
-	os.makedirs(os.path.join(commons.cacheDir, "modrinth-api"))
-
-def getMod(slug: str, mod_data: dict) -> None:
-	if cache.isModCached(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"]):
-		cache.getModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
+def getMod(ctx, slug: str, modData: dict) -> None:
+	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
+		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 		return
 
-	url = f"{mod_data['versions'][0]['files'][0]['url']}"
+	url = f"{modData['versions'][0]['files'][0]['url']}"
 	response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 	logger.info('Modrinth returned headers %s', response.headers)
 	if response.status_code != 200:
 		logger.error('Modrinth download returned %s', response.status_code)
 		raise RuntimeError(f"Failed to download mod: HTTP {response.status_code}")
 
-	with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), "wb") as f:
+	with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
 		f.write(response.content)
 
-	if commons.config["checksum"] in ["Always", "Download"]:
+	if ctx.config["checksum"] in ["Always", "Download"]:
 		perfcheck = True
-	elif commons.config["checksum"] == "Never":
+	elif ctx.config["checksum"] == "Never":
 		perfcheck = False
 	else:
 		perfcheck = True
 
 	if perfcheck:
 		print("Checking hash")
-		with open(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data['versions'][0]['files'][0]['filename']), 'rb') as f:
+		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
 			checksum = sha512(f.read()).hexdigest()
-		if mod_data["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
+		if modData["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
 			print("Failed to validate file")
-			os.remove(os.path.join(commons.instance_dir, mod_data['versions'][0]["folder"], mod_data["versions"][0]['files'][0]['filename']))
+			os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData["versions"][0]['files'][0]['filename']))
 			raise ChecksumError
 
-	cache.setModCache(slug, commons.mod_loader, mod_data['versions'][0]['version_number'], commons.instancecfg["version"], mod_data["versions"][0]["folder"], mod_data['versions'][0]['files'][0]['filename'])
+	cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData["versions"][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 
-def parseAPI(api_data: dict) -> list:
-	ptype, folder = projectGetType(api_data)
+def parseAPI(ctx, apiData: dict) -> list:
+	ptype, folder = projectGetType(ctx, apiData)
 	if ptype == "modpack":
-		print(f"{api_data['slug']} is a modpack")
+		print(f"{apiData['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
 
-	mod_loader = commons.instancecfg["loader"] if ptype == "mod" else api_data["loaders"][0] if ptype in ["shader", "resourcepack"] else "datapack" if ptype == "datapack" else ""
-	if ptype in ["shader", "resourcepack"] and commons.instancecfg["type"] != "client":
+	mod_loader = ctx.instance["loader"] if ptype == "mod" else apiData["loaders"][0] if ptype in ["shader", "resourcepack"] else "datapack" if ptype == "datapack" else ""
+	if ptype in ["shader", "resourcepack"] and ctx.instance["type"] != "client":
 		print(f"{ptype}s do not work on servers, skipping")
 		logger.warning("content of type '%s' can not be used on servers", ptype)
 		return ptype
-	if ptype == "datapack" and commons.instancecfg["type"] != "world":
+	if ptype == "datapack" and ctx.instance["type"] != "world":
 		print("mcmodman only supports datapacks for worlds, skipping")
 		logger.warning("content of type '%s' can only be used on worlds", ptype)
 		return ptype
 
-	matchesbychannel = {"release": [], "beta": [], "alpha": [], "translation": []}
-	for version in api_data["versions"]:
+	matchesbychannel: dict = {"release": [], "beta": [], "alpha": [], "translation": []}
+	for version in apiData["versions"]:
 		version["source"] = "modrinth"
 		version["date"] = version["date_published"]
 		version["type"] = ptype
-		if commons.instancecfg["version"] in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams[mod_loader] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		if ctx.instance["version"] in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams[mod_loader] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = os.path.basename(folder)
 			matchesbychannel[version["version_type"]].append(version)
-		elif commons.instancecfg["version"] in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["paper"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["paper"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "plugins"
 			matchesbychannel["translation"].append(version)
-		elif commons.instancecfg["version"] in version["game_versions"] and commons.instancecfg.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in commons.loaderUpstreams and any(loader in commons.loaderUpstreams["quilt"] for loader in version["loaders"]) and commons.config["allow-upstream"])):
+		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
 	matches = matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
-		logger.error("No matching versions found for mod '%s", api_data['slug'])
+		logger.error("No matching versions found for mod '%s", apiData['slug'])
 		return "No version"
 	return matches
 
-def getAPI(slug: str, depcheck: bool = False) -> dict:
-	cacheData = cache.getAPICache(slug, "modrinth")
+def getAPI(ctx, slug: str) -> dict:
+	cacheData = cache.getAPICache(ctx, slug, "modrinth")
 	if cacheData:
 		modData = cacheData
 
@@ -92,25 +89,24 @@ def getAPI(slug: str, depcheck: bool = False) -> dict:
 		try:
 			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 			if response.status_code != 200:
-				print(f"Mod '{slug}' not found")
-				raise SystemExit
+				return response.status_code
 			modData = response.json()
 			url = f"https://api.modrinth.com/v2/project/{slug}/version"
 			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
 			response.raise_for_status()
 			modData["versions"] = response.json()
 
-			cache.setAPICache(slug, modData, "modrinth")
+			cache.setAPICache(ctx, slug, modData, "modrinth")
 			if slug != modData['slug']:
-				cache.setAPICache(modData['slug'], modData, "modrinth")
+				cache.setAPICache(ctx, modData['slug'], modData, "modrinth")
 		except RequestException:
 			modData = {"versions": []}
 
 	modData["source"] = "modrinth"
 	return modData
 
-def searchAPI(query: str) -> dict:
-	cacheData = cache.getAPICache(query, "modrinth")
+def searchAPI(ctx, query: str) -> dict:
+	cacheData = cache.getAPICache(ctx, query, "modrinth")
 	if cacheData:
 		queryData = cacheData
 
@@ -123,7 +119,7 @@ def searchAPI(query: str) -> dict:
 			response.raise_for_status()
 			queryData = response.json()
 
-			cache.setAPICache(query, queryData, "modrinth")
+			cache.setAPICache(ctx, query, queryData, "modrinth")
 		except RequestException:
 			queryData = {"hits": []}
 
@@ -132,16 +128,16 @@ def searchAPI(query: str) -> dict:
 
 	return queryData
 
-def projectGetType(apiData):
+def projectGetType(ctx, apiData):
 	if apiData["project_type"] == "modpack":
 		ptype = "modpack"
 		folder = ""
 	elif apiData["project_type"] in ["shader", "resourcepack"]:
 		ptype = apiData["project_type"]
-		folder = os.path.join(commons.instance_dir, "shaderpacks" if apiData["project_type"] == "shader" else "resourcepacks")
+		folder = os.path.join(ctx.instanceDir, "shaderpacks" if apiData["project_type"] == "shader" else "resourcepacks")
 	elif apiData["project_type"] == "mod":
 		ptype = "mod"
-		folder = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"])
+		folder = os.path.join(ctx.instanceDir, ctx.instance["modfolder"])
 	else:
 		raise ValueError
 

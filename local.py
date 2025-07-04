@@ -1,35 +1,35 @@
 from shutil import copyfile, SameFileError
-import logging, os, json, yaml, zipfile, tomlkit, commons
+import logging, os, json, yaml, zipfile, tomlkit
 
 TAGS = []
 
-def getMod(slug: str, modData: dict):
+def getMod(ctx, slug: str, modData: dict):
 	try:
-		copyfile(modData["filename"], os.path.join(commons.instance_dir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
+		copyfile(modData["filename"], os.path.join(ctx.instanceDir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
 	except SameFileError:
 		pass
 
-def parseAPI(modData: dict) -> list:
-	modData["versions"] = [""]
-	modData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(modData["filename"]), "size": os.path.getsize(modData["filename"])}], "folder": f"{modData["project_type"]}s"}
-	if modData["from"] == "pack.mcmeta":
-		modData["versions"][0]["id"] = "Unknown"
-		modData["versions"][0]["version_number"] = "Unknown"
-	if modData["from"] == "mods.toml":
-		modData["versions"][0]["id"] = modData["mods"][0]["version"]
-		modData["versions"][0]["version_number"] = modData["mods"][0]["version"]
-		modData["versions"][0]["slug"] = modData["mods"][0]["modId"]
-	elif modData["from"] == "fabric.mod.json":
-		modData["versions"][0]["id"] = modData["version"]
-		modData["versions"][0]["version_number"] = modData["version"]
-		modData["versions"][0]["slug"] = modData["slug"]
-	elif modData["from"] == "plugin.yml":
-		modData["versions"][0]["id"] = modData["version"]
-		modData["versions"][0]["version_number"] = modData["version"]
-		modData["versions"][0]["slug"] = modData["name"]
-	return modData["versions"]
+def parseAPI(ctx, apiData: dict) -> list:
+	apiData["versions"] = [""]
+	apiData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(apiData["filename"]), "size": os.path.getsize(apiData["filename"])}], "folder": f"{apiData["project_type"]}s"}
+	if apiData["from"] == "pack.mcmeta":
+		apiData["versions"][0]["id"] = "Unknown"
+		apiData["versions"][0]["version_number"] = "Unknown"
+	if apiData["from"] == "mods.toml":
+		apiData["versions"][0]["id"] = apiData["mods"][0]["version"]
+		apiData["versions"][0]["version_number"] = apiData["mods"][0]["version"]
+		apiData["versions"][0]["slug"] = apiData["mods"][0]["modId"]
+	elif apiData["from"] == "fabric.mod.json":
+		apiData["versions"][0]["id"] = apiData["version"]
+		apiData["versions"][0]["version_number"] = apiData["version"]
+		apiData["versions"][0]["slug"] = apiData["slug"]
+	elif apiData["from"] == "plugin.yml":
+		apiData["versions"][0]["id"] = apiData["version"]
+		apiData["versions"][0]["version_number"] = apiData["version"]
+		apiData["versions"][0]["slug"] = apiData["name"]
+	return apiData["versions"]
 
-def getAPI(filename: str) -> dict:
+def getAPI(ctx, filename: str) -> dict:
 	with zipfile.ZipFile(filename, "r") as mod:
 		moddir = mod.namelist()
 		if "fabric.mod.json" in moddir:

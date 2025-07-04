@@ -3,6 +3,7 @@ defines common variables, and meta-instance functions
 """
 import argparse
 import logging, os, sys, appdirs, tomlkit
+from typing import Any
 from configobj import ConfigObj
 from instance import instanceFirstrun
 
@@ -88,11 +89,21 @@ def parse_args():
 	result["asexplicit"] = args.asexplicit
 	result["asdeps"] = args.asdeps
 	result["info"] = args.info
-	result["lock"] = result.get("operation") in ["sync", "update", "remove", "toggle", "downgrade"]
 	return result
 
 class InvalidOption(Exception):
 	"error: invalid option"
+
+class Context():
+	args: dict
+	config: ConfigObj
+	instance: ConfigObj
+	instanceDir: str
+	lockneeded: bool
+	loaderUpstreams: dict
+	color: Any
+
+ctx = Context()
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
 exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)) 
@@ -100,85 +111,83 @@ exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else o
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
-config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(config_dir, "mcmodman.conf")))
+config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(appdirs.user_config_dir("ekno/mcmodman"), "mcmodman.conf")))
 if os.path.exists(os.path.join(config_dir, "config.toml")) and not os.path.exists(config_file):
 	with open(os.path.join(config_dir, "config.toml"), "r") as f:
 		oldconfig = tomlkit.load(f)
-	config = ConfigObj(unrepr=True)
-	config.filename = config_file
+	ctx.config = ConfigObj(unrepr=True)
+	ctx.config.filename = config_file
 	for value in oldconfig:
-		config[value] = oldconfig[value]
-	config.write()
+		ctx.config[value] = oldconfig[value]
+	ctx.config.write()
 	os.remove(os.path.join(config_dir, "config.toml"))
 elif not os.path.exists(config_file):
 	if not os.path.exists(os.path.join(exe_dir, "config-template.ini")):
 		raise FileNotFoundError
-	config = ConfigObj(os.path.join(exe_dir, "config-template.ini"), unrepr=True)
-	config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
-	config["log-file"] = os.path.join(config_dir, "mcmodman.log")
-	config.filename = config_file
-	config.write()
+	ctx.config = ConfigObj(os.path.join(exe_dir, "config-template.ini"), unrepr=True)
+	ctx.config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
+	ctx.config["log-file"] = os.path.join(config_dir, "mcmodman.log")
+	ctx.config.filename = config_file
+	ctx.config.write()
 else:
-	config = ConfigObj(config_file, unrepr=True)
+	ctx.config = ConfigObj(config_file, unrepr=True)
 
-logger.info(config)
+logger.info(ctx.config)
 
-logging.basicConfig(filename=config["log-file"], level=logging.NOTSET)
+logging.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
 
 logger.info("Config directory: %s", config_dir)
 
 try:
-	args = parse_args()
-	logger.info("Arguments: %s", args)
+	ctx.args = parse_args()
+	ctx.lockneeded = ctx.args["operation"] in ["sync", "update", "remove", "toggle", "downgrade"]
+	logger.info("Arguments: %s", ctx.args)
 except Exception as e:
 	print("error: invalid option")
 	logger.critical("invalid option")
 	raise
 
-instances_file = config.get("instances-file", os.path.join(config_dir, "instances.ini"))
+ctx.instanceDir = ctx.config.get("instances-file", os.path.join(config_dir, "instances.ini"))
 if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.exists(instances_file):
 	with open(os.path.join(config_dir, "instances.toml"), "r") as f:
 		oldinstances = tomlkit.load(f)
-	instances = ConfigObj(unrepr=True)
-	instances.filename = instances_file
+	ctx.instance = ConfigObj(unrepr=True)
+	ctx.instance.filename = ctx.instanceDir
 	for value in oldinstances:
-		instances[value] = oldinstances[value]
-	instances.write()
+		ctx.instance[value] = oldinstances[value]
+	ctx.instance.write()
 	os.remove(os.path.join(config_dir, "instances.toml"))
-elif not os.path.exists(instances_file):
-	instances = ConfigObj(unrepr=True)
-	instances["dotminecraft"] = {"name": ".minecraft", "path": "~/%AppData%/roaming/.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
-	instances.filename = instances_file
-	instances.write()
+elif not os.path.exists(ctx.instanceDir):
+	ctx.instance = ConfigObj(unrepr=True)
+	ctx.instance["dotminecraft"] = {"name": ".minecraft", "path": "~/%AppData%/roaming/.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
+	ctx.instance.filename = ctx.instanceDir
+	ctx.instance.write()
 else:
-	instances = ConfigObj(instances_file, unrepr=True)
+	ctx.instance = ConfigObj(ctx.instanceDir, unrepr=True)
 
-logger.info("instances %s", instances)
+logger.info("instances %s", ctx.instance)
 
-cacheDir = config["cache-dir"]
-logger.info("Cache directory: %s", cacheDir)
-if not os.path.exists(cacheDir):
-	os.makedirs(cacheDir)
-	os.makedirs(os.path.join(cacheDir, "mods"))
+logger.info("Cache directory: %s", ctx.config["cache-dir"])
+if not os.path.exists(ctx.config["cache-dir"]):
+	os.makedirs(ctx.config["cache-dir"])
+	os.makedirs(os.path.join(ctx.config["cache-dir"], "mods"))
 
-class color:
+class color():
 	NORMAL = "\033[0m"
-	INPUT = "\033[94m" if args["color"] or config.get("Color", False) else "\033[0m"
-	ERROR = "\033[91m" if args["color"] or config.get("Color", False) else "\033[0m"
+	INPUT = "\033[94m" if ctx.args["color"] or ctx.config.get("Color", False) else "\033[0m"
+	ERROR = "\033[91m" if ctx.args["color"] or ctx.config.get("Color", False) else "\033[0m"
+ctx.color = color()
 
-if args["operation"] != "instance":
-	selected_instance = os.getenv("MCMMINSTANCE", config["selected-instance"])
-	if selected_instance in instances:
-		instance_dir = os.path.expanduser(instances[selected_instance]["path"])
+if ctx.args["operation"] != "instance":
+	if ctx.config["selected-instance"] in ctx.instance:
+		ctx.instanceDir = os.path.expanduser(ctx.instance[ctx.config["selected-instance"]]["path"])
 	else:
 		print("selected instance not found")
 		raise SystemExit
-	logger.info("selected instance: %s", selected_instance)
+	logger.info("selected instance: %s", ctx.config["selected-instance"])
 
-	instancecfg = ConfigObj(os.path.join(instance_dir, "mcmodman_managed.ini"), unrepr=True) if os.path.exists(os.path.join(instance_dir, "mcmodman_managed.ini")) else instanceFirstrun()
-	mod_loader = instancecfg["loader"]
+	ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True) if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")) else instanceFirstrun()
+	logger.info("instance %s", ctx.instance)
 
-	logger.info("instance %s", instancecfg)
-
-	loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}
+	ctx.loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}

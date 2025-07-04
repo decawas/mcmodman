@@ -2,8 +2,15 @@
 main logic, and functions with front-end functionality
 """
 
+from configobj import ConfigObj
 import logging, os, tqdm, commons, cache, hangar, modrinth, indexing, instance, local
-from typing import List # DEBUG
+from typing import List, Protocol
+ctx = commons.ctx
+
+if not os.path.exists(os.path.join(ctx.config["cache-dir"], "modrinth-api")):
+	os.makedirs(os.path.join(ctx.config["cache-dir"], "modrinth-api"))
+if not os.path.exists(os.path.join(ctx.config["cache-dir"], "hangar-api")):
+	os.makedirs(os.path.join(ctx.config["cache-dir"], "hangar-api"))
 
 logger = logging.getLogger(__name__)
 
@@ -11,16 +18,16 @@ class ModType():
 	def __init__(self, slug: str, reason: str="explicit"):
 		self.slug = slug
 		self.api_data = {}
-		self.index = indexing.get(slug, "explicit" if commons.args["asexplicit"] else "dependency" if commons.args["asdeps"] else reason)
+		self.index: dict = indexing.get(ctx, slug, "explicit" if ctx.args["asexplicit"] else "dependency" if ctx.args["asdeps"] else reason)
 		if self.index is None:
 			raise TargetNotFoundError(slug)
 		if self.index.get("source") is not None:
 			self.source = self.index["source"]
 		else:
-			self.source = "local" if any(ext in self.slug for ext in (".jar", ".zip")) else "sourceagnostic"
+			self.source = "local" if any(self.slug.endswith(ext) for ext in (".jar", ".zip")) else "sourceagnostic"
 
 	def isIgnored(self) -> bool:
-		return self.slug in commons.config["ignored-mods"]
+		return self.slug in ctx.config["ignored-mods"]
 
 	def isDisabled(self) -> bool | None: # returns true if disabled, false if enabled and none if not installed
 		return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
@@ -32,25 +39,25 @@ class ModType():
 		if self.index["version"] == "None": # if not installed, raise target not found
 			raise TargetNotFoundError(self.slug)
 		if self.isDisabled():
-			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}")
+			currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}")
 		else:
-			currentpath, newpath = os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}"), os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], f"{self.index['filename']}.disabled")
+			currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled")
 		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
 		os.rename(currentpath, newpath)
 	
 	@staticmethod
 	def modInstalled(slug):
-		return True if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.ini")) or os.path.exists(os.path.join(commons.instance_dir, ".content", f"{slug}.mm.toml")) else False
+		return True if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini")) or os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml")) else False
 
 def addMod():
-	slugs = [] + commons.args["slugs"]
-	if commons.args["all"]:
+	slugs = [] + ctx.args["slugs"]
+	if ctx.args["all"]:
 		slugs.extend(listAll())
 	if not slugs:
 		raise NoTargetsError
 	slugs = list(set(slugs))
-	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in commons.config["ignored-mods"]]
+	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
 
 	i, toremove, checked = -1, [], []
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
@@ -58,16 +65,16 @@ def addMod():
 		progress.update(1)
 		i += 1
 		mod = mods[i]
-		mod.api_data = sources[mod.source].getAPI(mod.slug)
-		mod.source = mod.api_data["source"]
+		mod.api_data = sources[mod.source].getAPI(ctx, mod.slug)
 		if not isinstance(mod.api_data, dict):
-			continue
+			raise TargetNotFoundError(mod.slug)
+		mod.source = mod.api_data["source"]
 		logger.info("Successfully got api data for mod '%s'", mod.slug)
-		mod.api_data["versions"] = sources[mod.source].parseAPI(mod.api_data)
+		mod.api_data["versions"] = sources[mod.source].parseAPI(ctx, mod.api_data)
 		checked.extend([mod.slug, mod.api_data["id"]])
 		if mod.source == "local":
 			mod.slug = mod.api_data["versions"][0]["slug"]
-			mod.index = indexing.get(mod.slug)
+			mod.index = indexing.get(ctx, mod.slug)
 		if mod.isInstalled() and mod.isDisabled():
 			progress.write(f"mod '{mod.slug}' is disabled, skipping")
 			toremove.append(mod)
@@ -76,20 +83,20 @@ def addMod():
 			toremove.append(mod)
 			continue
 		elif mod.api_data["versions"][0]["id"] == mod.index["version-id"]:
-			progress.write(f"Mod '{mod.slug}' already up to date, {'skipping' if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"] else 'reinstalling'}")
-			if commons.args["operation"] == "upgrade" or mod.slug not in commons.args["slugs"]:
+			progress.write(f"Mod '{mod.slug}' already up to date, {'skipping' if ctx.args["operation"] == "upgrade" or mod.slug not in ctx.args["slugs"] else 'reinstalling'}")
+			if ctx.args["operation"] == "upgrade" or mod.slug not in ctx.args["slugs"]:
 				toremove.append(mod)
 				continue
-		if commons.args["explicit"]:
+		if ctx.args["explicit"]:
 			continue
 		for dependency in mod.api_data["versions"][0]["dependencies"]:
 			if dependency["project_id"] in checked:
 				continue
-			dep_api_data = sources[mod.source].getAPI(dependency["project_id"], depcheck=True)
+			dep_api_data = sources[mod.source].getAPI(ctx, dependency["project_id"])
 			reason = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
 			progress.write(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}' ({"required" if reason == "dependency" else reason})\n" if not ModType.modInstalled(dep_api_data['slug']) else "", end="")
 			checked.append(dependency["project_id"])
-			if dependency['dependency_type'] != 'optional' or commons.config["get-optional-dependencies"] or commons.args["optional"]:
+			if dependency['dependency_type'] != 'optional' or ctx.config["get-optional-dependencies"] or ctx.args["optional"]:
 				mods.append(ModType(dep_api_data['slug'], reason))
 			progress.total = len(mods)
 			progress.refresh()
@@ -101,23 +108,23 @@ def addMod():
 		print("all mods are up to date")
 		return
 
-	_ = "" if commons.args["noconfirm"] else confirm(mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(mods)
 
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
 		if mod.slug in ["connector", "cardboard"]:
-			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			commons.instancecfg.write()
-		sources[mod.source].getMod(mod.slug, mod.api_data)
+			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
+			ctx.instance.write()
+		sources[mod.source].getMod(ctx, mod.slug, mod.api_data)
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
-		indexing.mcmm(mod.slug, mod.api_data, mod.index['reason'], mod.source)
+		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index['reason'], mod.source)
 		progress.update(1)
 	progress.close()
 
 def removeMod(slugs=None):
 	if slugs is None:
-		slugs = commons.args["slugs"]
+		slugs = ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
 	mods = [ModType(slug) for slug in slugs]
@@ -129,52 +136,52 @@ def removeMod(slugs=None):
 		if not mod.isInstalled():
 			raise TargetNotFoundError(mod.slug)
 
-	_ = "" if commons.args["noconfirm"] or commons.args["operation"] != "remove" else confirm(mods)
+	_ = "" if ctx.args["noconfirm"] or ctx.args["operation"] != "remove" else confirm(mods)
 
 	for mod in mods:
 		if mod.slug in ("cardboard", "connector"):
-			commons.instancecfg["translation-layer"] = "None"
-			commons.instancecfg.write()
+			ctx.instance["translation-layer"] = "None"
+			ctx.instance.write()
 		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
 			os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
 		elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
 			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
-		_ = os.remove(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(commons.instance_dir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
+		_ = os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
 		logger.info("Removed content '%s'", mod.slug)
-		if "index-compatibility" in commons.instancecfg and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
+		if "index-compatibility" in ctx.instance and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
 			os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
-		print(f"Removed mod '{mod.slug}'\n" if commons.args["operation"] == "remove" else "", end='')
+		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
 def confirm(mods: List[ModType]):
 	print("")
-	op = "remove" if commons.args["operation"] == "remove" else "download"
-	totaloldsize = sum(os.path.getsize(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod.index["filename"])) for mod in mods if os.path.exists(os.path.join(commons.instance_dir, commons.instancecfg["modfolder"], mod.index["filename"])))
+	op = "remove" if ctx.args["operation"] == "remove" else "download"
+	totaloldsize = sum(os.path.getsize(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], mod.index["filename"])) for mod in mods if os.path.exists(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], mod.index["filename"])))
 	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods) if op == "download"  else 0
 
 	for mod in mods:
 		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][0]['version_number'] if op == "download"  else None}")
 	print(f"\nTotal {op} size: {convertBytes(totalnewsize if op == "download" else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
-	yn = input(f"\n{commons.color.INPUT}::{commons.color.NORMAL} Proceed with download? [Y/n]: ")
+	yn = input(f"\n{ctx.color.INPUT}::{ctx.color.NORMAL} Proceed with download? [Y/n]: ")
 	print("")
 	if yn.lower() not in ["y", "", "yes"]:
 		logger.error("User declined %s", op)
 		raise SystemExit
 
 def queryMod():
-	slugs = listAll() if not commons.args["slugs"] else commons.args["slugs"]
+	slugs = listAll() if not ctx.args["slugs"] else ctx.args["slugs"]
 	mods = [ModType(slug) for slug in slugs]
 	for mod in mods:
 		if not mod.isInstalled():
 			print(f"mod {mod.slug} is not installed")
 			continue
-		if commons.args["explicit"] and mod.index["reason"] != "explicit":
+		if ctx.args["explicit"] and mod.index["reason"] != "explicit":
 			continue
-		if commons.args["dependency"] and mod.index["reason"] != "dependency":
+		if ctx.args["dependency"] and mod.index["reason"] != "dependency":
 			continue
-		if commons.args["optional"] and mod.index["reason"] != "optional":
+		if ctx.args["optional"] and mod.index["reason"] != "optional":
 			continue
-		if not commons.args["info"]:
+		if not ctx.args["info"]:
 			print(f"{mod.slug} {mod.index['version']}")
 		else:
 			print(f"Name{':'.rjust(13, ' ')} {mod.slug}")
@@ -189,12 +196,12 @@ def queryMod():
 
 def listAll() -> list:
 	ls = []
-	for file in os.listdir(os.path.join(commons.instance_dir, ".content")):
+	for file in os.listdir(os.path.join(ctx.instanceDir, ".content")):
 		ls.append(file[:-8] if file.endswith(".mm.toml") else file[:-7])
 	return ls
 
 def toggleMod():
-	slugs = commons.args["slugs"]
+	slugs = ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
 	mods = [ModType(slug) for slug in slugs]
@@ -202,10 +209,10 @@ def toggleMod():
 		mod.toggle()
 
 def searchMod():
-	query = commons.args["query"]
+	query = ctx.args["query"]
 	logger.info("Getting search data for query '%s'", query)
 	queryData = {source: sources[source].searchAPI for source in sources if "SEARCH" in sources[source].TAGS}
-	queryData = {"modrinth": modrinth.searchAPI(query), "hangar": hangar.searchAPI(query)}
+	queryData = {"modrinth": modrinth.searchAPI(ctx, query), "hangar": hangar.searchAPI(ctx, query)}
 	if not queryData["modrinth"]["hits"] and not queryData["hangar"]["hits"]:
 		print(f"No results found for query '{query}'")
 		logger.info("No results found for query '%s'", query)
@@ -214,22 +221,22 @@ def searchMod():
 	queryData["all"].extend(queryData["hangar"]["hits"])
 	queryData["all"].sort(key=lambda x: x["downloads"])
 	for hit in queryData["all"]:
-		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, commons.instancecfg["version"], commons.mod_loader)
+		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, ctx.instance["version"], ctx.instance["loader"])
 		print(f"{hit['source']}/{hit['slug']} by {hit['author']} {'[Installed]' if ModType.modInstalled(hit['slug']) else ''}")
 		print(f"\t{hit['description'].splitlines()[0]}")
 
 def downgradeMod():
-	slugs = commons.args["slugs"]
+	slugs = ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
 	mods = [ModType(slug) for slug in slugs]
 	for mod in mods:
 		versions = []
-		mod.api_data = {source: sources[source].getAPI(mod.slug) for source in sources if "EXTERNAL" in sources[source].TAGS}
+		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "EXTERNAL" in sources[source].TAGS}
 		for source in [source for source in sources if "EXTERNAL" in sources[source].TAGS]:
-			if isinstance(mod.api_data[source], str):
+			if not isinstance(mod.api_data[source], dict):
 				continue
-			mod.api_data[source]["versions"] = sources[source].parseAPI(mod.api_data[source])
+			mod.api_data[source]["versions"] = sources[source].parseAPI(ctx, mod.api_data[source])
 			if isinstance(mod.api_data[source].get("versions"), str):
 				continue
 			if not versions:
@@ -240,10 +247,10 @@ def downgradeMod():
 		mod.api_data["versions"] = sorted(versions, key=lambda x: x['date'], reverse=True)
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
-			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(mod.slug, commons.mod_loader, version['version_number'], commons.instancecfg["version"]) else ''
+			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(ctx, mod.slug, ctx.instance["loader"], version['version_number'], ctx.instance["version"]) else ''
 			print(f"  {len(mod.api_data['versions']) - i - 1})\t{version["source"]}/{mod.slug}\t{version['version_number']}\t{suffix}")
 
-		choice = input(f"{commons.color.INPUT}::{commons.color.NORMAL} Choose version: ")
+		choice = input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} Choose version: ")
 		try:
 			choice = int(choice)
 		except ValueError as exc:
@@ -258,22 +265,22 @@ def downgradeMod():
 		mod.api_data[mod.source]["versions"][0] = mod.api_data["versions"][0]
 		mod.api_data = mod.api_data[mod.source]
 
-	_ = "" if commons.args["noconfirm"] else confirm(mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(mods)
 
 	toignore = []
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
-		ignore =  input(f"{commons.color.INPUT}::{commons.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
+		ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 		if ignore == "y":
 			toignore.append(mod.slug)
 		_ = removeMod([mod.slug]) if mod.isInstalled() else ""
 		if mod.slug in ["connector", "cardboard"]:
-			commons.instancecfg["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			commons.instancecfg.write()
+			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
+			ctx.instance.write()
 
-		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(mod.slug, mod.api_data)
-		indexing.mcmm(mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
-		cache.setModCache(mod.slug, commons.mod_loader, mod.api_data["versions"][0]['version_number'], commons.instancecfg["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
+		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
+		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
+		cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
 		print(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
 	progress.close()
@@ -281,11 +288,11 @@ def downgradeMod():
 	ignoreMod(toignore)
 
 def ignoreMod(slugs=None):
-	slugs = commons.args["slugs"] if slugs is None else slugs
+	slugs = ctx.args["slugs"] if slugs is None else slugs
 	for slug in slugs:
-		commons.config["ignored-mods"].append(slug)
-	commons.config["ignored-mods"] = list(set(commons.config["ignored-mods"]))
-	commons.config.write()
+		ctx.config["ignored-mods"].append(slug)
+	ctx.config["ignored-mods"] = list(set(ctx.config["ignored-mods"]))
+	ctx.config.write()
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -312,8 +319,8 @@ class InvalidChoice(Exception):
 class sourceagnostic:
 	TAGS = []
 	@staticmethod
-	def getAPI(slug):
-		apiData = {"modrinth": modrinth.getAPI(slug), "hangar": hangar.getAPI(slug)}
+	def getAPI(ctx, slug):
+		apiData = {source: sources[source].getAPI(ctx, slug) for source in sources if "EXTERNAL" in sources[source].TAGS}
 		toremove = [source for source in apiData if not isinstance(apiData[source], dict)]
 		for source in toremove:
 			del apiData[source]
@@ -323,7 +330,7 @@ class sourceagnostic:
 			print(f"found multiple sources for mod '{slug}'\n")
 			for i, source in enumerate(reversed(apiData)):
 				print(f"  {len(apiData) - i - 1})\t{source}/{slug}")
-			choice = input(f"\n{commons.color.INPUT}::{commons.color.NORMAL} Choose source: ")
+			choice = input(f"\n{ctx.color.INPUT}::{ctx.color.NORMAL} Choose source: ")
 			try:
 				choice = int(choice)
 			except ValueError as exc:
@@ -336,13 +343,20 @@ class sourceagnostic:
 				return apiData[s]
 		return None
 
-sources = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
+class SourceAbstract(Protocol):
+	TAGS: list
+	def getMod(ctx: commons.Context, slug: str, modData: dict) -> None: ...
+	def parseAPI(ctx: commons.Context, apiData: dict) -> list: ...
+	def getAPI(ctx: commons.Context, slug: str) -> dict: ...
+	def searchAPI(ctx: commons.Context, query: str) -> dict: ...
+
+sources: dict[str, SourceAbstract] = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
 if __name__ == "__main__":
 	try:
-		if commons.args["lock"]:
-			if not os.path.exists(os.path.join(commons.instance_dir, "mcmodman.lock")):
-				fd = os.open(os.path.join(commons.instance_dir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+		if ctx.lockneeded:
+			if not os.path.exists(os.path.join(ctx.instanceDir, "mcmodman.lock")):
+				fd = os.open(os.path.join(ctx.instanceDir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
 				with os.fdopen(fd, 'w', encoding='utf-8') as f:
 					f.write("lock")
 					logger.info("Setting lock")
@@ -353,36 +367,36 @@ if __name__ == "__main__":
 
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda: print(commons.__version__)}
-		operations[commons.args["operation"]]()
+		operations[ctx.args["operation"]]()
 	except local.zipfile.BadZipFile:
 		print("bad")
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
 		logger.info("Process interrupted by user")
 	except LockExistsError as e:
-		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {commons.instance_dir}/mcmodman.lock")
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} could not lock instance: File Exists\n\tIf you're sure mcmodman is not already running for this instance, you can remove {ctx.instanceDir}/mcmodman.lock")
 		logger.critical("already running for instance")
 		raise SystemExit from e
 	except InvalidChoice as e:
-		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} {e}")
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} {e}")
 	except NoValidVersions:
-		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} could not find any valid versions")
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} could not find any valid versions")
 	except NoTargetsError:
-		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} no targets specified")
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} no targets specified")
 		logger.critical("user called operation that takes targets but no targets given")
 	except TargetNotFoundError as e:
-		print(f"{commons.color.ERROR}error:{commons.color.NORMAL} target not found: {e}")
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} target not found: {e}")
 		logger.critical("user gave target that doesnt exist")
 	except RuntimeError as e:
-		print(f"{commons.color.ERROR}An error occurred while running mcmodman{commons.color.NORMAL}")
+		print(f"{ctx.color.ERROR}An error occurred while running mcmodman{ctx.color.NORMAL}")
 		logger.critical(e)
 		raise
 	except Exception as e: # allows for removing the lock file when an unhandled error occurs
-		print(f"{commons.color.ERROR}An unexpected error occured, {e}{commons.color.NORMAL}")
+		print(f"{ctx.color.ERROR}An unexpected error occured, {e}{ctx.color.NORMAL}")
 		logger.critical(e)
 		raise
 	finally:
-		if commons.args["lock"] and os.path.exists(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock"))):
+		if ctx.lockneeded and os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "mcmodman.lock"))):
 			logger.info("Removing lock")
-			os.remove(os.path.expanduser(os.path.join(commons.instance_dir, "mcmodman.lock")))
+			os.remove(os.path.expanduser(os.path.join(ctx.instanceDir, "mcmodman.lock")))
 		logger.info("Exiting")
