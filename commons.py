@@ -2,10 +2,9 @@
 defines common variables, and meta-instance functions
 """
 import argparse
-import logging, os, sys, appdirs, tomlkit
+import logging, os, sys, appdirs
 from typing import Any
 from configobj import ConfigObj
-from instance import instanceFirstrun
 
 __version__ = "25.21"
 logger = logging.getLogger(__name__)
@@ -113,6 +112,7 @@ if not os.path.exists(config_dir):
 
 config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(appdirs.user_config_dir("ekno/mcmodman"), "mcmodman.conf")))
 if os.path.exists(os.path.join(config_dir, "config.toml")) and not os.path.exists(config_file):
+	import tomlkit
 	with open(os.path.join(config_dir, "config.toml"), "r") as f:
 		oldconfig = tomlkit.load(f)
 	ctx.config = ConfigObj(unrepr=True)
@@ -149,7 +149,8 @@ except Exception as e:
 	raise
 
 ctx.instanceDir = ctx.config.get("instances-file", os.path.join(config_dir, "instances.ini"))
-if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.exists(instances_file):
+if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.exists(ctx.instanceDir):
+	import tomlkit
 	with open(os.path.join(config_dir, "instances.toml"), "r") as f:
 		oldinstances = tomlkit.load(f)
 	ctx.instance = ConfigObj(unrepr=True)
@@ -187,7 +188,11 @@ if ctx.args["operation"] != "instance":
 		raise SystemExit
 	logger.info("selected instance: %s", ctx.config["selected-instance"])
 
-	ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True) if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")) else instanceFirstrun()
+	if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")):
+		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True)
+	else:
+		from instance import instanceFirstrun
+		ctx.instance = instanceFirstrun(ctx)
 	logger.info("instance %s", ctx.instance)
 
-	ctx.loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper","spigot","bukkit"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}
+	ctx.loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}

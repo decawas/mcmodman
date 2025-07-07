@@ -3,7 +3,7 @@ modrinth api functions
 """
 from hashlib import sha512
 import logging, os
-from requests import get, RequestException
+import pycurl, certifi, json
 import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
@@ -13,15 +13,13 @@ def getMod(ctx, slug: str, modData: dict) -> None:
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 		return
 
-	url = f"{modData['versions'][0]['files'][0]['url']}"
-	response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-	logger.info('Modrinth returned headers %s', response.headers)
-	if response.status_code != 200:
-		logger.error('Modrinth download returned %s', response.status_code)
-		raise RuntimeError(f"Failed to download mod: HTTP {response.status_code}")
-
 	with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
-		f.write(response.content)
+		response = pycurl.Curl()
+		response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
+		response.setopt(response.CAINFO, certifi.where())
+		response.setopt(response.WRITEDATA, f)
+		response.perform()
+		response.close()
 
 	if ctx.config["checksum"] in ["Always", "Download"]:
 		perfcheck = True
@@ -85,21 +83,25 @@ def getAPI(ctx, slug: str) -> dict:
 
 	if "modData" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
-		url = f"https://api.modrinth.com/v2/project/{slug}"
 		try:
-			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-			if response.status_code != 200:
-				return response.status_code
-			modData = response.json()
-			url = f"https://api.modrinth.com/v2/project/{slug}/version"
-			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-			response.raise_for_status()
-			modData["versions"] = response.json()
+			buffer = bytearray()
+			response = pycurl.Curl()
+			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}")
+			response.setopt(response.CAINFO, certifi.where())
+			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+			response.perform()
+			modData = json.loads(buffer.decode("utf-8"))
+			buffer = bytearray()
+			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}/version")
+			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+			response.perform()
+			modData["versions"] = json.loads(buffer.decode("utf-8"))
+			response.close()
 
 			cache.setAPICache(ctx, slug, modData, "modrinth")
 			if slug != modData['slug']:
 				cache.setAPICache(ctx, modData['slug'], modData, "modrinth")
-		except RequestException:
+		except ZeroDivisionError:
 			modData = {"versions": []}
 
 	modData["source"] = "modrinth"

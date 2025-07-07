@@ -10,6 +10,8 @@ def getMod(ctx, slug: str, modData: dict):
 		pass
 
 def parseAPI(ctx, apiData: dict) -> list:
+	if apiData == {"source": "local", "id": ""}:
+		return "no"
 	apiData["versions"] = [""]
 	apiData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(apiData["filename"]), "size": os.path.getsize(apiData["filename"])}], "folder": f"{apiData["project_type"]}s"}
 	if apiData["from"] == "pack.mcmeta":
@@ -30,6 +32,8 @@ def parseAPI(ctx, apiData: dict) -> list:
 	return apiData["versions"]
 
 def getAPI(ctx, filename: str) -> dict:
+	if "/" not in filename:
+		return {"source": "local", "id": ""}
 	with zipfile.ZipFile(filename, "r") as mod:
 		moddir = mod.namelist()
 		if "fabric.mod.json" in moddir:

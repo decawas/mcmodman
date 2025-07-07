@@ -3,7 +3,7 @@ hangar api functions
 """
 from hashlib import sha256
 import logging, os
-from requests import get
+import pycurl, certifi, json
 import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
@@ -14,16 +14,13 @@ def getMod(ctx, slug: str, modData: dict) -> None:
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 		return
 
-	print(f"Downloading plugin '{slug}'")
-	url = modData['versions'][0]['files'][0]['url']
-	response = get(url, timeout=30)
-	logger.info('Hangar returned headers %s', response.headers)
-	if response.status_code != 200:
-		logger.error('Hangar download returned %s', response.status_code)
-		raise RuntimeError(f"Failed to download plugin: HTTP {response.status_code}")
-
 	with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
-		f.write(response.content)
+		response = pycurl.Curl()
+		response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
+		response.setopt(response.CAINFO, certifi.where())
+		response.setopt(response.WRITEDATA, f)
+		response.perform()
+		response.close()
 
 	if ctx.config["checksum"] in ["Always", "Download"]:
 		perfcheck = True
@@ -43,7 +40,7 @@ def getMod(ctx, slug: str, modData: dict) -> None:
 	elif perfcheck:
 		print(f"warning: could not verify mod {slug}, no checksum provided")
 
-	cache.setModCache(slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+	cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 
 def parseAPI(ctx, apiData: dict) -> list:
 	matchesbychannel = {"release": [], "snapshot": [], "alpha": [], "translation": []}
@@ -72,17 +69,21 @@ def getAPI(ctx, slug: str) -> dict:
 	if "modData" not in locals():
 		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from hangar", slug, slug)
 
-		url = f"https://hangar.papermc.io/api/v1/projects/{slug}"
-		response = get(url, timeout=30)
-		if response.status_code != 200:
-			return response.status_code
-		modData = response.json()
-		url = f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25"
-		response = get(url, timeout=30)
-		response.raise_for_status()
-		modData["versions"] = response.json()["result"]
+		buffer = bytearray()
+		response = pycurl.Curl()
+		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}")
+		response.setopt(response.CAINFO, certifi.where())
+		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.perform()
+		modData = json.loads(buffer.decode("utf-8"))
+		buffer = bytearray()
+		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25")
+		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.perform()
+		modData["versions"] = json.loads(buffer.decode("utf-8"))
+		response.close()
 
-		cache.setAPICache(slug, modData, "hangar")
+		cache.setAPICache(ctx, slug, modData, "hangar")
 
 	modData["source"] = "hangar"
 	modData["type"] = "plugin"

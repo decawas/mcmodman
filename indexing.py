@@ -1,7 +1,7 @@
 """
 handles indexing for content
 """
-import logging, os, tomlkit, time
+import logging, os, time
 from configobj import ConfigObj # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 		packwiz(ctx, slug, mod_data)
 
 def packwiz(ctx, slug, mod_data):
+	import tomlkit
 	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index"))):
 		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index")))
 	index = {"filename": mod_data['versions'][0]['files'][0]['filename'], "name": mod_data["title"]}
@@ -61,6 +62,7 @@ def get(ctx, slug, reason="explicit") -> dict:
 		logger.info("Loaded index for mod '%s'", slug)
 		return dict(index)
 	elif os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml")):
+		import tomlkit
 		with open(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml"), "r", encoding="utf-8") as f:
 			index = tomlkit.load(f)
 		logger.info("Loaded index for mod '%s' (legacy)", slug)

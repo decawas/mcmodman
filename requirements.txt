@@ -1,5 +1,5 @@
 appdirs>=1.4.4
-requests>=2.32.3
+pycurl>=7.45.6
 pyyaml>=6.0.2
 tomlkit>=0.13.2
 configobj>=5.0.9

@@ -1,8 +1,7 @@
 """
 Instance management functions for mcmodman
 """
-from pathlib import Path
-import os, re, json, logging, appdirs, requests
+import os, re, json, logging
 from configobj import ConfigObj
 import cache
 
@@ -30,10 +29,18 @@ def instanceFirstrun(ctx):
 		if cacheData:
 			versionData = cacheData["api"]
 		else:
-			response = requests.get("https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json", timeout=30)
+			import pycurl, certifi, json
+			buffer = bytearray()
+			response = pycurl.Curl()
+			response.setopt(response.URL, "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json")
+			response.setopt(response.CAINFO, certifi.where())
+			response.setopt(response.WRITEFUNCTION, buffer)
 			response.raise_for_status()
-			versionData = response.json()
+			response.perform()
+			versionData = json.loads(buffer.decode("utf-8"))
+			response.close()
 			cache.setAPICache(ctx, "versiondata.ini", versionData, "./")
+		from pathlib import Path
 		advancements = sorted(Path(os.path.expanduser(os.path.join(ctx.instanceDir, "advancements"))).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
 			advancements = json.loads(f.read())
@@ -50,7 +57,7 @@ def instanceFirstrun(ctx):
 	if instance["type"] != "world" and not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "logs", "latest.log"))):
 		print("instance must be run at least once before using mcmodman")
 	
-	instance["index-compatibility"] = compdetect(ctx.instanceDir)
+	instance["index-compatibility"] = compdetect(ctx)
 	
 	instance.filename = os.path.join(ctx.instanceDir, "mcmodman_managed.ini")
 	instance.write()

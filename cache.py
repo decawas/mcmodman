@@ -4,10 +4,10 @@ cache related functions
 
 from shutil import copyfile
 from time import time
-import logging, os, configobj # type: ignore
-from typing import TYPE_CHECKING
+import logging, os, configobj
 
 APICACHEVERSION = 4
+preserve = {}
 
 def isAPICached(ctx, filename: str, source: str) -> bool:
 	filename = filename.split(".")[0]
@@ -15,6 +15,7 @@ def isAPICached(ctx, filename: str, source: str) -> bool:
 	if not os.path.exists(path):
 		return False
 	cacheData = configobj.ConfigObj(path, unrepr=True, encoding='utf-8')
+	preserve[filename] = cacheData
 	return time() - cacheData["time"] <= ctx.config["api-expire"] and cacheData["api-cache-version"] == APICACHEVERSION
 
 def isModCached(ctx, slug: str, loader: str, mod_version: str, game_version: str) -> bool:
@@ -23,7 +24,10 @@ def isModCached(ctx, slug: str, loader: str, mod_version: str, game_version: str
 def getAPICache(ctx, slug: str, source: str) -> dict:
 	if not isAPICached(ctx, slug, source):
 		return False
-	cacheData = configobj.ConfigObj(os.path.join(ctx.config["cache-dir"], f"{source}-api", f"{slug}.{f'{source}query' if ctx.args['operation'] == 'search' else 'mmcache'}.ini"), unrepr=True, encoding='utf-8')
+	if slug in preserve:
+		cacheData = preserve[slug]
+	else:
+		cacheData = configobj.ConfigObj(os.path.join(ctx.config["cache-dir"], f"{source}-api", f"{slug}.{f'{source}query' if ctx.args['operation'] == 'search' else 'mmcache'}.ini"), unrepr=True, encoding='utf-8')
 	return cacheData["api"]
 
 def getModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str) -> bool:
