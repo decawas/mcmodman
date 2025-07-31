@@ -76,6 +76,8 @@ def getAPI(ctx, slug: str) -> dict:
 		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 		response.perform()
 		modData = json.loads(buffer.decode("utf-8"))
+		if modData.get("httpError") != None:
+			return 404
 		buffer = bytearray()
 		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25")
 		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
