@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ".content"))):
 		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ".content")))
-	print(f"Indexing mod '{slug}'")
 
 	index = ConfigObj(unrepr=True)
 	index['index-version'] = 4
@@ -22,7 +21,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	index['folder'] = os.path.expanduser(os.path.join(ctx.instanceDir, mod_data['versions'][0]["folder"]))
 	index['source'] = source
 	index['game-version'] = ctx.instance["loader"]
-	index['description'] = mod_data["description"]
+	index['description'] = mod_data.get("description", "")
 	if source == "modrinth":
 		index['loader'] = mod_data['versions'][0]["loaders"][0] if ctx.instance["loader"] not in mod_data['versions'][0]["loaders"] else ctx.instance["loader"]
 	elif source == "hangar":

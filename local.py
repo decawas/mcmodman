@@ -17,6 +17,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 	if apiData["from"] == "pack.mcmeta":
 		apiData["versions"][0]["id"] = "Unknown"
 		apiData["versions"][0]["version_number"] = "Unknown"
+		apiData["versions"][0]["slug"] = apiData["versions"][0]["files"][0]["filename"][:-4].replace(".", "-").replace(" ", "-")
 	if apiData["from"] == "mods.toml":
 		apiData["versions"][0]["id"] = apiData["mods"][0]["version"]
 		apiData["versions"][0]["version_number"] = apiData["mods"][0]["version"]
@@ -57,7 +58,7 @@ def getAPI(ctx, filename: str) -> dict:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "resourcepack"
 			modData["from"] = "pack.mcmeta"
-		elif "data/" in moddir and "pack.mcmeta" in moddir:
+		elif any([path.startswith("data/") for path in moddir]) and "pack.mcmeta" in moddir:
 			with mod.open('pack.mcmeta') as data:
 				modData = json.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "datapack"
