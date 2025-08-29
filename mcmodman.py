@@ -2,7 +2,7 @@
 main logic, and functions with front-end functionality
 """
 import logging, os, commons, cache, indexing, instance
-from typing import List, Literal, Protocol
+from typing import List, Protocol
 ctx = commons.ctx
 
 if not os.path.exists(os.path.join(ctx.config["cache-dir"], "modrinth-api")): # ts will not make it to version 3
@@ -32,6 +32,9 @@ class ModType():
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
+	
+	def getPath(self) -> str:
+		return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
 
 	def toggle(self):
 		if self.index["version"] == "None": # if not installed, raise target not found
@@ -113,18 +116,21 @@ def addMod(ctx):
 
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
-		_ = removeMod(ctx, [mod.slug]) if mod.isInstalled() else ""
+		if mod.isInstalled() and os.path.exists(mod.getPath()):
+			os.remove(mod.getPath())
 		if mod.slug in ["connector", "cardboard"]:
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 		sources[mod.source].getMod(ctx, mod.slug, mod.api_data)
 		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
+		progress.write(f"Indexing mod '{mod.slug}'")
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index['reason'], mod.source)
 		progress.update(1)
 	progress.close()
 
 def removeMod(ctx, slugs=None):
-	slugs = [] + ctx.args["slugs"]
+	if slugs is None:
+		slugs = [] + ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
 	mods = [ModType(slug) for slug in slugs]
@@ -136,7 +142,7 @@ def removeMod(ctx, slugs=None):
 		if not mod.isInstalled():
 			raise TargetNotFoundError(mod.slug)
 
-	_ = "" if ctx.args["noconfirm"] or ctx.args["operation"] != "remove" else confirm(ctx, mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
 	for mod in mods:
 		if mod.slug in ("cardboard", "connector"):
@@ -146,7 +152,7 @@ def removeMod(ctx, slugs=None):
 			os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
 		elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
 			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
-		_ = os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
+		os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
 		logger.info("Removed content '%s'", mod.slug)
 		if "index-compatibility" in ctx.instance and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
 			os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
@@ -273,7 +279,8 @@ def downgradeMod(ctx):
 		ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 		if ignore == "y":
 			toignore.append(mod.slug)
-		_ = removeMod(ctx, [mod.slug]) if mod.isInstalled() else ""
+		if mod.isInstalled() and os.path.exists(mod.getPath()):
+			os.remove(mod.getPath())
 		if mod.slug in ["connector", "cardboard"]:
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
@@ -290,9 +297,9 @@ def downgradeMod(ctx):
 def ignoreMod(ctx, slugs=None):
 	slugs = ctx.args["slugs"] if slugs is None else slugs
 	for slug in slugs:
-		ctx.config["ignored-mods"].append(slug)
-	ctx.config["ignored-mods"] = list(set(ctx.config["ignored-mods"]))
-	ctx.config.write()
+		ctx.instance["ignored-mods"].append(slug)
+	ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
+	ctx.instance.write()
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -374,8 +381,6 @@ if __name__ == "__main__":
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda _: print(commons.__version__)}
 		operations[ctx.args["operation"]](ctx)
-	except local.zipfile.BadZipFile:
-		print("bad")
 	except KeyboardInterrupt:
 		print("Interrupt signal received")
 		logger.info("Process interrupted by user")
