@@ -5,7 +5,7 @@ TAGS = []
 
 def getMod(ctx, slug: str, modData: dict):
 	try:
-		copyfile(modData["filename"], os.path.join(ctx.instanceDir, f"{modData["project_type"]}s", os.path.basename(modData["versions"][0]["files"][0]["filename"])))
+		copyfile(modData['filename'], os.path.join(ctx.instanceDir, f"{modData['project_type']}s", os.path.basename(modData['versions'][0]['files'][0]['filename'])))
 	except SameFileError:
 		pass
 
@@ -13,7 +13,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 	if apiData == {"source": "local", "id": ""}:
 		return "no"
 	apiData["versions"] = [""]
-	apiData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(apiData["filename"]), "size": os.path.getsize(apiData["filename"])}], "folder": f"{apiData["project_type"]}s"}
+	apiData["versions"][0] = {"dependencies": [], "files": [{"filename": os.path.basename(apiData["filename"]), "size": os.path.getsize(apiData["filename"]) }], "folder": f"{apiData['project_type']}s"}
 	if apiData["from"] == "pack.mcmeta":
 		apiData["versions"][0]["id"] = "Unknown"
 		apiData["versions"][0]["version_number"] = "Unknown"
@@ -22,14 +22,10 @@ def parseAPI(ctx, apiData: dict) -> list:
 		apiData["versions"][0]["id"] = apiData["mods"][0]["version"]
 		apiData["versions"][0]["version_number"] = apiData["mods"][0]["version"]
 		apiData["versions"][0]["slug"] = apiData["mods"][0]["modId"]
-	elif apiData["from"] == "fabric.mod.json":
+	elif apiData["from"] in ["fabric.mod.json", "plugin.yml"]:
 		apiData["versions"][0]["id"] = apiData["version"]
 		apiData["versions"][0]["version_number"] = apiData["version"]
 		apiData["versions"][0]["slug"] = apiData["slug"]
-	elif apiData["from"] == "plugin.yml":
-		apiData["versions"][0]["id"] = apiData["version"]
-		apiData["versions"][0]["version_number"] = apiData["version"]
-		apiData["versions"][0]["slug"] = apiData["name"]
 	return apiData["versions"]
 
 def getAPI(ctx, filename: str) -> dict:
