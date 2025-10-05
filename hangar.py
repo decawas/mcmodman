@@ -30,15 +30,16 @@ def getMod(ctx, slug: str, modData: dict) -> None:
 		perfcheck = True
 
 	if perfcheck and modData['versions'][0]['files'][0].get("hashes"):
-		print("Checking hash")
-		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
-			checksum = sha256(f.read()).hexdigest()
-		if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
-			print("Failed to validate file")
-			os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
-			raise ChecksumError
-	elif perfcheck:
-		print(f"warning: could not verify mod {slug}, no checksum provided")
+		if not modData['versions'][0]['files'][0].get("hashes"):
+			print(f"warning: could not verify mod {slug}, no checksum provided")
+		else:
+			print("Checking hash")
+			with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
+				checksum = sha256(f.read()).hexdigest()
+			if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
+				print("Failed to validate file")
+				os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
+				raise ChecksumError		
 
 	cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 
@@ -100,9 +101,14 @@ def searchAPI(ctx, query: str) -> dict:
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying hangar with query '{query}'")
 		url = f"https://hangar.papermc.io/api/v1/projects?sort=downloads&platform=paper&q={query.replace(' ', '+')}&version={ctx.instance["version"]}"
-		response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-		response.raise_for_status()
-		queryData = response.json()
+		buffer = bytearray()
+		response = pycurl.Curl()
+		response.setopt(response.URL, url)
+		response.setopt(response.CAINFO, certifi.where())
+		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.perform()
+		queryData = json.loads(buffer.decode("utf-8"))
+		response.close()
 
 		cache.setAPICache(ctx, query, queryData, "hangar")
 

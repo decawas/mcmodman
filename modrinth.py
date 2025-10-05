@@ -70,9 +70,9 @@ def parseAPI(ctx, apiData: dict) -> list:
 		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
-	matches = matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
+	matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
-		logger.error("No matching versions found for mod '%s", apiData['slug'])
+		logger.error("No matching versions found for mod '%s'", apiData['slug'])
 		return "No version"
 	return matches
 
@@ -93,7 +93,6 @@ def getAPI(ctx, slug: str) -> dict:
 			modData = json.loads(buffer.decode("utf-8"))
 			buffer = bytearray()
 			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}/version")
-			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 			response.perform()
 			modData["versions"] = json.loads(buffer.decode("utf-8"))
 			response.close()
@@ -115,15 +114,17 @@ def searchAPI(ctx, query: str) -> dict:
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying modrinth with query '{query}'")
-		url = f"https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}&facets=[[\"project_types!=modpack\"]]"
-		try:
-			response = get(url, headers={'User-Agent': 'github: https://github.com/decawas/mcmodman discord: .ekno'}, timeout=30)
-			response.raise_for_status()
-			queryData = response.json()
+		url = f'https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}'
+		buffer = bytearray()
+		response = pycurl.Curl()
+		response.setopt(response.URL, url)
+		response.setopt(response.CAINFO, certifi.where())
+		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.perform()
+		queryData = json.loads(buffer.decode("utf-8"))
+		response.close()
 
-			cache.setAPICache(ctx, query, queryData, "modrinth")
-		except RequestException:
-			queryData = {"hits": []}
+		cache.setAPICache(ctx, query, queryData, "modrinth")
 
 	for hit in queryData["hits"]:
 		hit["source"] = "modrinth"
