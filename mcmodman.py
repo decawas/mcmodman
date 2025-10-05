@@ -32,7 +32,7 @@ class ModType():
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
-	
+
 	def getPath(self) -> str:
 		return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
 
@@ -46,7 +46,7 @@ class ModType():
 		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
 		os.rename(currentpath, newpath)
-	
+
 	@staticmethod
 	def modInstalled(slug):
 		return True if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini")) or os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml")) else False
@@ -59,7 +59,7 @@ def addMod(ctx):
 		raise NoTargetsError
 	slugs = list(set(slugs))
 	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
-	
+
 	i, toremove, checked = -1, [], []
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
 	while i < len(mods) - 1:
@@ -114,19 +114,7 @@ def addMod(ctx):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
-	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
-	for mod in mods:
-		if mod.isInstalled() and os.path.exists(mod.getPath()):
-			os.remove(mod.getPath())
-		if mod.slug in ["connector", "cardboard"]:
-			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			ctx.instance.write()
-		sources[mod.source].getMod(ctx, mod.slug, mod.api_data)
-		logger.info("Sucessfully downloaded content '%s' (%s B)", mod.slug, mod.api_data['versions'][0]['files'][0]['size'])
-		progress.write(f"Indexing mod '{mod.slug}'")
-		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index['reason'], mod.source)
-		progress.update(1)
-	progress.close()
+	installMod(ctx, mods)
 
 def removeMod(ctx, slugs=None):
 	if slugs is None:
@@ -273,12 +261,16 @@ def downgradeMod(ctx):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
+	installMod(ctx, mods)
+
+def installMod(ctx, mods):
 	toignore = []
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
-		ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
-		if ignore == "y":
-			toignore.append(mod.slug)
+		if ctx.args["ignore"] and not mod.isIgnored():
+			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
+			if ignore == "y":
+				toignore.append(mod.slug)
 		if mod.isInstalled() and os.path.exists(mod.getPath()):
 			os.remove(mod.getPath())
 		if mod.slug in ["connector", "cardboard"]:
@@ -288,18 +280,16 @@ def downgradeMod(ctx):
 		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
 		cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
-		print(f"Mod '{mod.slug}' successfully updated")
+		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
 	progress.close()
 
-	_ = ignoreMod(ctx, toignore) if toignore else ""
-
-def ignoreMod(ctx, slugs=None):
-	slugs = ctx.args["slugs"] if slugs is None else slugs
-	for slug in slugs:
-		ctx.instance["ignored-mods"].append(slug)
-	ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
-	ctx.instance.write()
+	if ctx.args["ignore"]:
+		slugs = ctx.args["slugs"] if slugs is None else slugs
+		for slug in slugs:
+			ctx.instance["ignored-mods"].append(slug)
+		ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
+		ctx.instance.write()
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -361,7 +351,7 @@ class SourceAbstract(Protocol):
 	@staticmethod
 	def searchAPI(ctx: commons.Context, query: str) -> dict: ...
 
-if ctx.args["operation"] in ["sync", "upgrade", "search", "downgrade", "search",]: # only import sources when needed
+if ctx.args["operation"] in ["sync", "upgrade", "search", "downgrade"]: # only import sources when needed
 	import modrinth, hangar, local, tqdm
 	sources: dict[str, SourceAbstract] = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
 
@@ -377,9 +367,9 @@ if __name__ == "__main__":
 				print("mcmodman is already running for this instance")
 				logger.info("mcmodman.lock file already exists, exiting")
 				raise LockExistsError("mcmodman is already running for this instance")
-		
+
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
-		"instance": instance.instanceMeta, "ignore": ignoreMod, "version": lambda _: print(commons.__version__)}
+		"instance": instance.instanceMeta, "version": lambda _: print(commons.__version__)}
 		operations[ctx.args["operation"]](ctx)
 	except KeyboardInterrupt:
 		print("Interrupt signal received")

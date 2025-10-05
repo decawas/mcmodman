@@ -18,12 +18,12 @@ def parse_args():
 	ops.add_argument("-T", "--toggle", action="store_true", help="Toggle mods")
 	ops.add_argument("-Q", "--query", action="store_true", help="Query mods")
 	ops.add_argument("-D", "--downgrade", action="store_true", help="Downgrade mods")
-	ops.add_argument("--ignore", action="store_true", help="Ignore mods")
+	
 	ops.add_argument("-F", "--search", action="store_true", help="Search mods")
 	ops.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
 	ops.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
 	ops.add_argument("--version", action="store_true")
-	
+
 	asexpldeps = parser.add_mutually_exclusive_group()
 	asexpldeps.add_argument("--asexplicit", action="store_true", help="Define newly installed mods as explicit, even if they are dependencies")
 	asexpldeps.add_argument("--asdeps", action="store_true", help="Define newly installed mods as dependencies, even if they are installed explicitly")
@@ -35,6 +35,7 @@ def parse_args():
 	parser.add_argument("-y", "--noconfirm", action="store_true", help="Skip the confirmation dialogue, does not skip the ignore question in downgrade")
 	parser.add_argument("-c", "--color", action="store_true", help="Enable colour output")
 	parser.add_argument("-i", "--info", action="store_true", help="Display information for a given mod")
+	parser.add_argument("--ignore", action="store_true", help="Ignore mods")
 	parser.add_argument("slugs", nargs="*", help="Mod slugs to operate on")
 
 	try:
@@ -88,6 +89,7 @@ def parse_args():
 	result["asexplicit"] = args.asexplicit
 	result["asdeps"] = args.asdeps
 	result["info"] = args.info
+	result["ignore"] = args.ignore
 	return result
 
 class InvalidOption(Exception):
@@ -105,7 +107,7 @@ class Context():
 ctx = Context()
 
 config_dir = appdirs.user_config_dir("ekno/mcmodman")
-exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__)) 
+exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
 
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
@@ -141,7 +143,7 @@ logger.info("Config directory: %s", config_dir)
 
 try:
 	ctx.args = parse_args()
-	ctx.lockneeded = ctx.args["operation"] in ["sync", "update", "remove", "toggle", "downgrade"]
+	ctx.lockneeded = ctx.args["operation"] in ["sync", "upgrade", "remove", "toggle", "downgrade"]
 	logger.info("Arguments: %s", ctx.args)
 except Exception as e:
 	print("error: invalid option")
