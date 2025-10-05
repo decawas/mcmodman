@@ -7,6 +7,7 @@ import pycurl, certifi, json
 import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
+BANG = "hangar"
 
 def getMod(ctx, slug: str, modData: dict) -> None:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
@@ -63,6 +64,8 @@ def parseAPI(ctx, apiData: dict) -> list:
 	return matches
 
 def getAPI(ctx, slug: str) -> dict:
+	if ctx.instance["loader"] not in ["paper", "folia"]:
+		return 500
 	cacheData = cache.getAPICache(ctx, slug, "hangar")
 	if cacheData:
 		modData = cacheData

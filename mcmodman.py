@@ -21,6 +21,14 @@ class ModType():
 			raise TargetNotFoundError(slug)
 		if self.index.get("source") is not None:
 			self.source = self.index["source"]
+		elif "/" in slug:
+			for source in [source for source in sources if hasattr(sources[source], "BANG")]:
+				if not slug.startswith(f"{sources[source].BANG}/"):
+					continue
+				self.source = source
+				self.slug = slug[len(f"{sources[source].BANG}/"):]
+				print(slug)
+				break
 		else:
 			self.source = "local" if any(self.slug.endswith(ext) for ext in (".jar", ".zip")) else "sourceagnostic"
 

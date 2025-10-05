@@ -2,6 +2,7 @@ from shutil import copyfile, SameFileError
 import logging, os, json, yaml, zipfile, tomlkit
 
 TAGS = []
+BANG = "local"
 
 def getMod(ctx, slug: str, modData: dict):
 	try:

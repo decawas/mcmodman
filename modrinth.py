@@ -7,6 +7,7 @@ import pycurl, certifi, json
 import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
+BANG = "modrinth"
 
 def getMod(ctx, slug: str, modData: dict) -> None:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
