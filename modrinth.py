@@ -19,6 +19,7 @@ def getMod(ctx, slug: str, modData: dict) -> None:
 		response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
 		response.setopt(response.CAINFO, certifi.where())
 		response.setopt(response.WRITEDATA, f)
+		response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
 		response.perform()
 		response.close()
 
@@ -71,6 +72,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
+		version["filepaths"] = [os.path.expanduser(os.path.join(ctx.instanceDir, version["folder"], version['files'][0]['filename']))]
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
 		logger.error("No matching versions found for mod '%s'", apiData['slug'])
@@ -90,7 +92,10 @@ def getAPI(ctx, slug: str) -> dict:
 			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}")
 			response.setopt(response.CAINFO, certifi.where())
 			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+			response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
 			response.perform()
+			if buffer == b"":
+				return 500
 			modData = json.loads(buffer.decode("utf-8"))
 			buffer = bytearray()
 			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}/version")
@@ -121,6 +126,7 @@ def searchAPI(ctx, query: str) -> dict:
 		response.setopt(response.URL, url)
 		response.setopt(response.CAINFO, certifi.where())
 		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
 		response.perform()
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
