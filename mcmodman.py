@@ -27,7 +27,6 @@ class ModType():
 					continue
 				self.source = source
 				self.slug = slug[len(f"{sources[source].BANG}/"):]
-				print(slug)
 				break
 		else:
 			self.source = "local" if any(self.slug.endswith(ext) for ext in (".jar", ".zip")) else "sourceagnostic"
@@ -36,13 +35,19 @@ class ModType():
 		return self.slug in ctx.config["ignored-mods"]
 
 	def isDisabled(self) -> bool | None: # returns true if disabled, false if enabled and none if not installed
-		return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
+		if self.index["index-version"] <= 4:
+			return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
+		else:
+			return True if os.path.exists(os.path.join(f"{self.index['files'][0]}.disabled")) else False if os.path.exists(self.index['files'][0]) else None
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
 
 	def getPath(self) -> str:
-		return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
+		if self.index["index-version"] <= 4:
+			return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
+		else:
+			return self.index["files"]
 
 	def toggle(self):
 		if self.index["version"] == "None": # if not installed, raise target not found
@@ -69,6 +74,8 @@ def addMod(ctx):
 	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
 
 	i, toremove, checked = -1, [], []
+	for mod in mods:
+		checked.extend([mod.slug, mod.index["mod-id"]])
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
 	while i < len(mods) - 1:
 		progress.update(1)
@@ -140,24 +147,45 @@ def removeMod(ctx, slugs=None):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
+def removeFinal(ctx, mods, suppressTranslation):
 	for mod in mods:
-		if mod.slug in ("cardboard", "connector"):
+		if not suppressTranslation and mod.slug in ("cardboard", "connector"):
 			ctx.instance["translation-layer"] = "None"
 			ctx.instance.write()
-		if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
-			os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
-		elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
-			os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
-		os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini" if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")) else f"{mod.slug}.mm.toml"))
+		if mod.index["index-version"] <= 4:
+			if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
+				os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
+			elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
+				os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
+		else:
+			for file in [file for file in mod.getPath() if os.path.exists(file)]:
+				os.remove(file)
+		if mod.isInstalled():
+			if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")):
+				os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini"))
+			elif os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml")):
+				os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml"))
+
+			if os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
+				os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
 		logger.info("Removed content '%s'", mod.slug)
-		if "index-compatibility" in ctx.instance and os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")):
-			os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
 		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
 def confirm(ctx, mods: List[ModType]):
 	print("")
 	op = "remove" if ctx.args["operation"] == "remove" else "download"
-	totaloldsize = sum(os.path.getsize(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], mod.index["filename"])) for mod in mods if os.path.exists(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], mod.index["filename"])))
+	totaloldsize = 0
+	for mod in mods:
+		if "size" in mod.index:
+			totaloldsize += mod.index["size"]
+		elif mod.index["index-version"] <= 4:
+			if os.path.exists(mod.getPath()):
+				os.path.getsize(mod.getPath())
+		else:
+			for file in mod.getPath():
+				if os.path.exists(file):
+					os.path.getsize(file)
+
 	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods) if op == "download"  else 0
 
 	for mod in mods:
@@ -245,7 +273,7 @@ def downgradeMod(ctx):
 				mod.api_data["type"] = mod.api_data[source]["project_type"]
 			versions.extend(mod.api_data[source]["versions"])
 		for version in versions:
-			version["date"] = version["date_published"] or version["createdAt"]
+			version["date"] = version.get("date_published", version.get("createdAt", 0))
 		mod.api_data["versions"] = sorted(versions, key=lambda x: x['date'], reverse=True)
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
@@ -279,13 +307,12 @@ def installMod(ctx, mods):
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
 				toignore.append(mod.slug)
-		if mod.isInstalled() and os.path.exists(mod.getPath()):
-			os.remove(mod.getPath())
+		removeFinal(mods, True)
 		if mod.slug in ["connector", "cardboard"]:
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 
-		sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
+		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
 		cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
 		progress.write(f"Mod '{mod.slug}' successfully updated")
@@ -350,8 +377,9 @@ class sourceagnostic: # a fake source that looks up other sources
 
 class SourceAbstract(Protocol):
 	TAGS: list
+	BANG: str
 	@staticmethod
-	def getMod(ctx: commons.Context, slug: str, modData: dict) -> None: ...
+	def getMod(ctx: commons.Context, slug: str, modData: dict) -> list: ...
 	@staticmethod
 	def parseAPI(ctx: commons.Context, apiData: dict) -> list: ...
 	@staticmethod

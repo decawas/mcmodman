@@ -9,37 +9,37 @@ import cache
 TAGS = ["SEARCH", "EXTERNAL"]
 BANG = "modrinth"
 
-def getMod(ctx, slug: str, modData: dict) -> None:
+def getMod(ctx, slug: str, modData: dict) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
-		return
-
-	with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
-		response = pycurl.Curl()
-		response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
-		response.setopt(response.CAINFO, certifi.where())
-		response.setopt(response.WRITEDATA, f)
-		response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
-		response.perform()
-		response.close()
-
-	if ctx.config["checksum"] in ["Always", "Download"]:
-		perfcheck = True
-	elif ctx.config["checksum"] == "Never":
-		perfcheck = False
 	else:
-		perfcheck = True
+		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
+			response = pycurl.Curl()
+			response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
+			response.setopt(response.CAINFO, certifi.where())
+			response.setopt(response.WRITEDATA, f)
+			response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
+			response.perform()
+			response.close()
 
-	if perfcheck:
-		print("Checking hash")
-		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
-			checksum = sha512(f.read()).hexdigest()
-		if modData["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
-			print("Failed to validate file")
-			os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData["versions"][0]['files'][0]['filename']))
-			raise ChecksumError
+		if ctx.config["checksum"] in ["Always", "Download"]:
+			perfcheck = True
+		elif ctx.config["checksum"] == "Never":
+			perfcheck = False
+		else:
+			perfcheck = True
 
-	cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData["versions"][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+		if perfcheck:
+			print("Checking hash")
+			with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
+				checksum = sha512(f.read()).hexdigest()
+			if modData["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
+				print("Failed to validate file")
+				os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData["versions"][0]['files'][0]['filename']))
+				raise ChecksumError
+
+		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData["versions"][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+	return [os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])]
 
 def parseAPI(ctx, apiData: dict) -> list:
 	ptype, folder = projectGetType(ctx, apiData)
@@ -72,7 +72,6 @@ def parseAPI(ctx, apiData: dict) -> list:
 		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
-		version["filepaths"] = [os.path.expanduser(os.path.join(ctx.instanceDir, version["folder"], version['files'][0]['filename']))]
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
 		logger.error("No matching versions found for mod '%s'", apiData['slug'])

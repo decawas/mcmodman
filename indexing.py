@@ -6,13 +6,15 @@ from configobj import ConfigObj # type: ignore
 
 logger = logging.getLogger(__name__)
 
+INDEX_VERSION = 5
+
 def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ".content"))):
 		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ".content")))
 
 	index = ConfigObj(unrepr=True)
-	index['index-version'] = 4
-	index['filename'] = mod_data['versions'][0]['files'][0]['filename']
+	index['index-version'] = INDEX_VERSION
+	index['files'] = mod_data["versions"][0]["filepaths"]
 	index['slug'] = slug
 	index['mod-id'] = mod_data.get("id") or mod_data.get("projectID")
 	index['version'] = mod_data['versions'][0]["version_number"]
@@ -21,12 +23,12 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	index['folder'] = os.path.expanduser(os.path.join(ctx.instanceDir, mod_data['versions'][0]["folder"]))
 	index['source'] = source
 	index['game-version'] = ctx.instance["loader"]
-	index['description'] = mod_data.get("description", "")
+	index['description'] = mod_data.get("description", "Description Not Provided")
 	if source == "modrinth":
 		index['loader'] = mod_data['versions'][0]["loaders"][0] if ctx.instance["loader"] not in mod_data['versions'][0]["loaders"] else ctx.instance["loader"]
 	elif source == "hangar":
 		index['loader'] = ctx.instance["loader"]
-	index['filesize'] = mod_data['versions'][0]['files'][0]["size"]
+	index['filesize'] = mod_data['versions'][0]['files'][0]["size"] or 0
 	index['date'] = time.ctime()
 	index['reason'] = reason
 
@@ -34,7 +36,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	index.write()
 	logger.debug("index %s for mod '%s' written to %s", dict(index), slug, index.filename)
 
-	if "index-compatibility" in ctx.instance and ctx.instance["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source != "local":
+	if "index-compatibility" in ctx.instance and ctx.instance["index-compatibility"] == "packwiz" and mod_data["project_type"] == "mod" and source in ["modrinth"]:
 		packwiz(ctx, slug, mod_data)
 
 def packwiz(ctx, slug, mod_data):
@@ -67,7 +69,7 @@ def get(ctx, slug, reason="explicit") -> dict:
 		logger.info("Loaded index for mod '%s' (legacy)", slug)
 		return index
 	elif ctx.args["operation"] in ["sync", "downgrade"]:
-		index = {"slug": slug, "filename": "-", "version": "None", "version-id": "None", "reason": reason}
+		index = {"index-version": 2147483647, "slug": slug, "files": [], "version": "None", "version-id": "None", "reason": reason, "size": 0}
 		logger.info("Created dummy index for new mod '%s'", slug)
 		return index
 	return None

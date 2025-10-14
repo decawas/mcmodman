@@ -9,53 +9,55 @@ import cache
 TAGS = ["SEARCH", "EXTERNAL"]
 BANG = "hangar"
 
-def getMod(ctx, slug: str, modData: dict) -> None:
+def getMod(ctx, slug: str, modData: dict) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
 		print(f"Using cached version for plugin '{slug}'")
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
-		return
-
-	with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
-		response = pycurl.Curl()
-		response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
-		response.setopt(response.CAINFO, certifi.where())
-		response.setopt(response.WRITEDATA, f)
-		response.perform()
-		response.close()
-
-	if ctx.config["checksum"] in ["Always", "Download"]:
-		perfcheck = True
-	elif ctx.config["checksum"] == "Never":
-		perfcheck = False
+		
 	else:
-		perfcheck = True
+		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
+			response = pycurl.Curl()
+			response.setopt(response.URL, f"{modData['versions'][0]['files'][0]['url']}")
+			response.setopt(response.CAINFO, certifi.where())
+			response.setopt(response.WRITEDATA, f)
+			response.perform()
+			response.close()
 
-	if perfcheck and modData['versions'][0]['files'][0].get("hashes"):
-		if not modData['versions'][0]['files'][0].get("hashes"):
-			print(f"warning: could not verify mod {slug}, no checksum provided")
+		if ctx.config["checksum"] in ["Always", "Download"]:
+			perfcheck = True
+		elif ctx.config["checksum"] == "Never":
+			perfcheck = False
 		else:
-			print("Checking hash")
-			with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
-				checksum = sha256(f.read()).hexdigest()
-			if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
-				print("Failed to validate file")
-				os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
-				raise ChecksumError		
+			perfcheck = True
 
-	cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+		if perfcheck and modData['versions'][0]['files'][0].get("hashes"):
+			if not modData['versions'][0]['files'][0].get("hashes"):
+				print(f"warning: could not verify mod {slug}, no checksum provided")
+			else:
+				print("Checking hash")
+				with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
+					checksum = sha256(f.read()).hexdigest()
+				if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
+					print("Failed to validate file")
+					os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
+					raise ChecksumError
+
+		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+	return [os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])]
 
 def parseAPI(ctx, apiData: dict) -> list:
 	matchesbychannel = {"release": [], "snapshot": [], "alpha": [], "translation": []}
 	for version in apiData["versions"]:
-		if ctx.instance["version"] in version["platformDependencies"]["PAPER"]:
-			version["folder"] = "plugins"
-			version["source"] = "hangar"
-			versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "dependencies": [], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
-			versionf["date"] = version["createdAt"]
-			if ctx.instance["loader"] == "paper" or (ctx.instance["loader"] in ["folia", "purpur"] and ctx.config["allow-upstream"]) or (ctx.instance["loader"] == "folia" and "SUPPORTS_FOLIA" in version["settings"]["tags"]):
-				matchesbychannel[version["channel"]["name"].lower()].append(versionf)
-			elif ctx.instance.get("translation-layer", None) == "cardboard":
-				matchesbychannel["translation"].append(versionf)
+		if ctx.instance["version"] not in version["platformDependencies"]["PAPER"]:
+			continue
+		version["folder"] = "plugins"
+		version["source"] = "hangar"
+		versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "dependencies": [], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
+		versionf["date"] = version["createdAt"]
+		if ctx.instance["loader"] == "paper" or (ctx.instance["loader"] in ["folia", "purpur"] and ctx.config["allow-upstream"]) or (ctx.instance["loader"] == "folia" and "SUPPORTS_FOLIA" in version["settings"]["tags"]):
+			matchesbychannel[version["channel"]["name"].lower()].append(versionf)
+		elif ctx.instance.get("translation-layer", None) == "cardboard":
+			matchesbychannel["translation"].append(versionf)
 
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("snapshot") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
