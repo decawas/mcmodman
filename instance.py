@@ -34,8 +34,7 @@ def instanceFirstrun(ctx):
 			response = pycurl.Curl()
 			response.setopt(response.URL, "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json")
 			response.setopt(response.CAINFO, certifi.where())
-			response.setopt(response.WRITEFUNCTION, buffer)
-			response.raise_for_status()
+			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 			response.perform()
 			versionData = json.loads(buffer.decode("utf-8"))
 			response.close()
@@ -114,15 +113,15 @@ def compdetect(ctx) -> str:
 		prismcomp = input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} Enable dual indexing? [Y/n]: ")
 		if prismcomp.lower() == "y" or prismcomp == "":
 			return "packwiz"
-
 	return "None"
 
 def instanceMeta(ctx):
 	"""Handle instance management operations (add, select, remove, list)."""
-	if ctx.args["suboperation"] not in ["add", "select", "remove", "list"]:
-		print("Usage: mcmodman --instance <add|select|remove|list>")
+	if ctx.args["suboperation"] not in ["add", "select", "remove", "list", "export"]:
+		print("Usage: mcmodman --instance <add|select|remove|list|export>")
 		logger.error("--intsance flag missing arguments")
 		return
+	print(ctx.args)
 	if ctx.args["suboperation"] == "add":
 		if ctx.args["name"] is None or ctx.args["path"] is None:
 			print("Usage: mcmodman --instance add <name> <path>")
@@ -135,6 +134,7 @@ def instanceMeta(ctx):
 		ctx.instance[ctx.args["name"]] = {"name": ctx.args["name"], "path": ctx.args["path"]}
 		ctx.instance.write()
 		print(f"Added instance '{ctx.args['name']}'")
+		return
 	if ctx.args["suboperation"] == "select":
 		if ctx.args["name"] in ctx.instance:
 			ctx.config["selected-instance"] = ctx.args["name"]
@@ -142,6 +142,7 @@ def instanceMeta(ctx):
 			print(f"Selected instance '{ctx.args['name']}'")
 			return
 		print(f"Instance '{ctx.args['name']}' not found")
+		return
 	if ctx.args["suboperation"] == "remove":
 		if ctx.args["name"] == ctx.config["selected-instance"]:
 			print("cant delete selected instance")
@@ -153,6 +154,13 @@ def instanceMeta(ctx):
 				print(f"Deleted instance '{ctx.args['name']}'")
 				return
 		print(f"Instance '{ctx.args['name']}' not found")
+		return
 	if ctx.args["suboperation"] == "list":
 		for name in list(ctx.instance.keys()):
 			print(name, "*" if name == ctx.config["selected-instance"] else "")
+		return
+	if ctx.args["suboperation"] == "export":
+		for mod in [file[:-8] if file.endswith(".mm.toml") else file[:-7] for file in os.listdir(os.path.join(ctx.instance[ctx.config["selected-instance"]]["path"], ".content"))]:
+			print(mod, end=" ")
+		print("")
+		
