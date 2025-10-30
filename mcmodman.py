@@ -52,13 +52,23 @@ class ModType():
 	def toggle(self):
 		if self.index["version"] == "None": # if not installed, raise target not found
 			raise TargetNotFoundError(self.slug)
-		if self.isDisabled():
-			currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}")
+		if self.index["index-version"] <= 4:
+			if self.isDisabled():
+				currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}")
+			else:
+				currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled")
+			logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
+			print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
+			os.rename(currentpath, newpath)
 		else:
-			currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled")
-		logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
-		print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
-		os.rename(currentpath, newpath)
+			for file in self.index["files"]:
+				if self.isDisabled():
+					currentpath, newpath = f"{file}.disabled", file
+				else:
+					currentpath, newpath = file, f"{file}.disabled"
+				logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
+				os.rename(currentpath, newpath)
+			print(f"Mod '{self.slug}' has been {'disabled' if self.isDisabled() else 'enabled'}")
 
 	@staticmethod
 	def modInstalled(slug):
@@ -75,7 +85,7 @@ def addMod(ctx):
 
 	i, toremove, checked = -1, [], []
 	for mod in mods:
-		checked.extend([mod.slug, mod.index["mod-id"]])
+		_ = checked.extend([mod.slug, mod.index["mod-id"]]) if "mod-id" in mod.index else checked.extend([mod.slug])
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
 	while i < len(mods) - 1:
 		progress.update(1)
@@ -146,8 +156,10 @@ def removeMod(ctx, slugs=None):
 			raise TargetNotFoundError(mod.slug)
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
+	
+	removeFinal(ctx, mods)
 
-def removeFinal(ctx, mods, suppressTranslation):
+def removeFinal(ctx, mods, suppressTranslation=False):
 	for mod in mods:
 		if not suppressTranslation and mod.slug in ("cardboard", "connector"):
 			ctx.instance["translation-layer"] = "None"
@@ -307,7 +319,7 @@ def installMod(ctx, mods):
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
 				toignore.append(mod.slug)
-		removeFinal(mods, True)
+		removeFinal(ctx, mods, True)
 		if mod.slug in ["connector", "cardboard"]:
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
