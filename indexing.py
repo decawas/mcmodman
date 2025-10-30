@@ -12,7 +12,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ".content"))):
 		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ".content")))
 
-	index = ConfigObj(unrepr=True)
+	index = ConfigObj(unrepr=True, encoding='utf-8')
 	index['index-version'] = INDEX_VERSION
 	index['files'] = mod_data["versions"][0]["filepaths"]
 	index['slug'] = slug
@@ -22,7 +22,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	index['type'] = mod_data['versions'][0].get("type", "")
 	index['folder'] = os.path.expanduser(os.path.join(ctx.instanceDir, mod_data['versions'][0]["folder"]))
 	index['source'] = source
-	index['game-version'] = ctx.instance["loader"]
+	index['game-version'] = ctx.instance["version"]
 	index['description'] = mod_data.get("description", "Description Not Provided")
 	if source == "modrinth":
 		index['loader'] = mod_data['versions'][0]["loaders"][0] if ctx.instance["loader"] not in mod_data['versions'][0]["loaders"] else ctx.instance["loader"]
@@ -59,7 +59,7 @@ def packwiz(ctx, slug, mod_data):
 
 def get(ctx, slug, reason="explicit") -> dict:
 	if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini")):
-		index = ConfigObj(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini"), unrepr=True)
+		index = ConfigObj(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini"), unrepr=True, encoding='utf-8')
 		logger.info("Loaded index for mod '%s'", slug)
 		return dict(index)
 	elif os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml")):

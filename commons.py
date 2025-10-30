@@ -155,14 +155,14 @@ if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.ex
 	import tomlkit
 	with open(os.path.join(config_dir, "instances.toml"), "r") as f:
 		oldinstances = tomlkit.load(f)
-	ctx.instance = ConfigObj(unrepr=True)
+	ctx.instance = ConfigObj(unrepr=True, encoding='utf-8')
 	ctx.instance.filename = ctx.instanceDir
 	for value in oldinstances:
 		ctx.instance[value] = oldinstances[value]
 	ctx.instance.write()
 	os.remove(os.path.join(config_dir, "instances.toml"))
 elif not os.path.exists(ctx.instanceDir):
-	ctx.instance = ConfigObj(unrepr=True)
+	ctx.instance = ConfigObj(unrepr=True, encoding='utf-8')
 	ctx.instance["dotminecraft"] = {"name": ".minecraft", "path": "~/%AppData%/roaming/.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
 	ctx.instance.filename = ctx.instanceDir
 	ctx.instance.write()
@@ -191,7 +191,7 @@ if ctx.args["operation"] != "instance":
 	logger.info("selected instance: %s", ctx.config["selected-instance"])
 
 	if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")):
-		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True)
+		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True, encoding='utf-8')
 	else:
 		from instance import instanceFirstrun
 		ctx.instance = instanceFirstrun(ctx)

@@ -8,7 +8,7 @@ import cache
 logger = logging.getLogger(__name__)
 
 def instanceFirstrun(ctx):
-	instance = ConfigObj(unrepr=True)
+	instance = ConfigObj(unrepr=True, encoding='utf-8')
 	if os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "options.txt"))):
 		instance["type"] = "client"
 		instance["modfolder"] = "mods"
@@ -119,13 +119,13 @@ def instanceMeta(ctx):
 	"""Handle instance management operations (add, select, remove, list)."""
 	if ctx.args["suboperation"] not in ["add", "select", "remove", "list", "export"]:
 		print("Usage: mcmodman --instance <add|select|remove|list|export>")
-		logger.error("--intsance flag missing arguments")
+		logger.error("--instance flag missing arguments")
 		return
 	print(ctx.args)
 	if ctx.args["suboperation"] == "add":
 		if ctx.args["name"] is None or ctx.args["path"] is None:
 			print("Usage: mcmodman --instance add <name> <path>")
-			logger.error("--intsance flag missing arguments")
+			logger.error("--instance flag missing arguments")
 			return
 		if ctx.args["name"] in ctx.instance.keys():
 			print(f"Instance '{ctx.args['name']}' already exists")
