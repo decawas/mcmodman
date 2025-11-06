@@ -8,6 +8,7 @@ import cache
 
 TAGS = ["SEARCH", "EXTERNAL"]
 BANG = "hangar"
+DB = "hangar.db"
 
 def getMod(ctx, slug: str, modData: dict) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):

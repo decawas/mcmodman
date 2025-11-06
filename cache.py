@@ -56,36 +56,35 @@ def setModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str
 		return
 	copyfile(os.path.join(ctx.instanceDir, folder, filename), os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
 
-def clearCache(ctx):
-	if ctx.args["suboperation"] in ["api", "all"]:
-		clearAPICache(ctx)
+def clearCache(ctx, sources):
 	if ctx.args["suboperation"] in ["content", "all"]:
 		clearModCache(ctx)
-	if not any([os.listdir(os.path.join(ctx.config["cache-dir"], "modrinth-api")), os.listdir(os.path.join(ctx.config["cache-dir"], "hangar-api"))]):
+	if ctx.args["suboperation"] in ["api", "all"]:
+		clearAPICache(ctx, sources)
 		return
-	for source in ["modrinth", "hangar"]:
-		for file in os.listdir(os.path.join(ctx.config["cache-dir"], f"{source}-api")):
-			cacheData = configobj.ConfigObj(os.path.join(ctx.config["cache-dir"], f"{source}-api", file), unrepr=True, encoding='utf-8')
-			if time() - cacheData["time"] > ctx.config["api-expire"] or cacheData.get("api-cache-version", 0) != APICACHEVERSION:
-				os.remove(os.path.join(ctx.config["cache-dir"], f"{source}-api", file))
-				logger.info("Deleted cache for %s because it has expired", file.split('.')[0])
-				print(f"Deleted api cache for {file.split('.')[0]} (expired)")
+	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
+		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
+		db.execute("DELETE FROM cache WHERE time < ?", (time() - 3600,))
+		db.commit()
+		db.close()
+		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))
+	
 	print("Done Clearing Cache")
 
-def clearAPICache(ctx):
-	if not any([os.listdir(os.path.join(ctx.config["cache-dir"], "modrinth-api")), os.listdir(os.path.join(ctx.config["cache-dir"], "hangar-api"))]):
-		return
+def clearAPICache(ctx, sources):
 	if not ctx.args["noconfirm"]:
 		print("Are you sure you want to clear all api cache?\nThis action cannot be undone\n")
 		yn = input(":: Proceed with clearing all api cache? [Y/n]: ")
 		print("")
 		if yn.lower() != 'y' and yn != '':
 			return
-	for source in ["modrinth", "hangar"]:
-		for file in os.listdir(os.path.join(ctx.config["cache-dir"], f"{source}-api")):
-			os.remove(os.path.join(ctx.config["cache-dir"], f"{source}-api", file))
-			print(f"Deleted api cache for {file.split('.')[0]}")
-			logger.info("Deleted api cache for %s (clear all)", file.split('.')[0])
+	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
+		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
+		db.execute("DELETE FROM cache")
+		db.commit()
+		db.close()
+		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))
+	print("Done Clearing Cache")
 
 def clearModCache(ctx):
 	if not os.listdir(os.path.join(ctx.config["cache-dir"], "mods")):

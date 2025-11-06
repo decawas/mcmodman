@@ -25,7 +25,7 @@ def instanceFirstrun(ctx):
 		instance["type"] = "world"
 		instance["loader"] = "datapack"
 		instance["modfolder"] = "datapacks"
-		cacheData = cache.getAPICache(ctx, "versiondata.ini", "./")
+		cacheData = cache.getAPICache(ctx, "prismarine.db", "protocol")
 		if cacheData:
 			versionData = cacheData["api"]
 		else:
@@ -38,7 +38,7 @@ def instanceFirstrun(ctx):
 			response.perform()
 			versionData = json.loads(buffer.decode("utf-8"))
 			response.close()
-			cache.setAPICache(ctx, "versiondata.ini", versionData, "./")
+			cache.setAPICache(ctx, "prismarine.db", "protocol", versionData)
 		from pathlib import Path
 		advancements = sorted(Path(os.path.expanduser(os.path.join(ctx.instanceDir, "advancements"))).iterdir(), key=os.path.getmtime)
 		with open(os.path.expanduser(advancements[-1]), "r", encoding="utf-8") as f:
