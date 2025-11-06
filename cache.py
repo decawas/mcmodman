@@ -4,49 +4,52 @@ cache related functions
 
 from shutil import copyfile
 from time import time
-import logging, os, configobj
+import logging, os, configobj, sqlite3, json
 
-APICACHEVERSION = 4
+APICACHEVERSION = 5
 preserve = {}
 
-def isAPICached(ctx, filename: str, source: str) -> bool:
-	filename = filename.split(".")[0]
-	path = os.path.join(ctx.config["cache-dir"], f"{source}-api", f"{filename}.{f'{source}query' if ctx.args['operation'] == 'search' else 'mmcache'}.ini") if not source.startswith("./") else os.path.join(ctx.config["cache-dir"], source, filename)
-	if not os.path.exists(path):
+def isAPICached(ctx, db: str, slug: str) -> bool:
+	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
+	try:
+		cacheData = db.execute("SELECT * FROM cache WHERE slug=?", (slug,)).fetchone()
+	except sqlite3.OperationalError:
 		return False
-	cacheData = configobj.ConfigObj(path, unrepr=True, encoding='utf-8')
-	preserve[filename] = cacheData
-	return time() - cacheData["time"] <= ctx.config["api-expire"] and cacheData["api-cache-version"] == APICACHEVERSION
-
+	if cacheData is None:
+		return False
+	preserve[slug] = json.loads(cacheData[3])
+	db.close()
+	return time() - cacheData[2] <= ctx.config["api-expire"] and cacheData[1] == APICACHEVERSION
+	
 def isModCached(ctx, slug: str, loader: str, mod_version: str, game_version: str) -> bool:
 	return os.path.exists(os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
 
-def getAPICache(ctx, slug: str, source: str) -> dict:
-	if not isAPICached(ctx, slug, source):
+def getAPICache(ctx, db: str, slug: str) -> dict:
+	if not isAPICached(ctx, db, slug):
 		return False
+	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
 	if slug in preserve:
 		cacheData = preserve[slug]
 	else:
-		cacheData = configobj.ConfigObj(os.path.join(ctx.config["cache-dir"], f"{source}-api", f"{slug}.{f'{source}query' if ctx.args['operation'] == 'search' else 'mmcache'}.ini"), unrepr=True, encoding='utf-8')
-	return cacheData["api"]
+		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
+		cacheData = json.loads(db.execute("SELECT * FROM cache WHERE slug=?", (slug,)).fetchone()[3])
+		db.close()
+	return cacheData
 
 def getModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str) -> bool:
 	if not isModCached(ctx, slug, loader, mod_version, game_version):
 		return False
 	copyfile(os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"), os.path.join(ctx.instanceDir, folder, filename))
 	return True
- 
-def setAPICache(ctx, slug: str, apiData: dict, source: str):
-	path = os.path.join(ctx.config["cache-dir"], f"{source}-api", f"{slug}.{f'{source}query' if ctx.args['operation'] == 'search' else 'mmcache'}.ini") if not source.startswith("./") else os.path.join(ctx.config["cache-dir"], source, slug)
-	cacheData = configobj.ConfigObj(unrepr=True, encoding='utf-8')
-	cacheData["time"] = time()
-	cacheData["api-cache-version"] = APICACHEVERSION
-	cacheData["api"] = apiData
-	cacheData.filename = path
-	logger.info(f"Caching data for {'query' if ctx.args['operation'] == 'search' else 'mod'} '%s' to %s", slug, path)
-	if slug in ctx.args["query" if ctx.args['operation'] == "search" else "slugs"]:
-		print(f"Caching data for {'query' if ctx.args['operation'] == 'search' else 'mod'} '{slug}'")
-	cacheData.write()
+
+def setAPICache(ctx, db: str, slug: str, apiData: dict):
+	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
+	db.execute("""CREATE TABLE IF NOT EXISTS
+		cache(slug TEXT PRIMARY KEY, apicacheversion INTEGER, time FLOAT, data TEXT)""")
+	db.execute("""INSERT OR REPLACE INTO cache VALUES
+		(?, ?, ?, ?)""", (slug, APICACHEVERSION, time(), json.dumps(apiData)))
+	db.commit()
+	db.close()
 
 def setModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
 	if isModCached(ctx, slug, loader, mod_version, game_version):

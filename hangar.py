@@ -68,7 +68,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 def getAPI(ctx, slug: str) -> dict:
 	if ctx.instance["loader"] not in ["paper", "folia"]:
 		return 500
-	cacheData = cache.getAPICache(ctx, slug, "hangar")
+	cacheData = cache.getAPICache(ctx,  "hangar.db", slug)
 	if cacheData:
 		modData = cacheData
 
@@ -90,15 +90,15 @@ def getAPI(ctx, slug: str) -> dict:
 		response.perform()
 		modData["versions"] = json.loads(buffer.decode("utf-8"))
 		response.close()
-
-		cache.setAPICache(ctx, slug, modData, "hangar")
+		cache.setAPICache(ctx, "hangar.db", modData["slug"], modData)
+		cache.setAPICache(ctx, "hangar.db", modData["id"], modData)
 
 	modData["source"] = "hangar"
 	modData["type"] = "plugin"
 	return modData
 
 def searchAPI(ctx, query: str) -> dict:
-	cacheData = cache.getAPICache(ctx, query, "hangar")
+	cacheData = cache.getAPICache(ctx, "hangarsearch.db", query)
 	if cacheData:
 		queryData = cacheData
 
@@ -115,7 +115,7 @@ def searchAPI(ctx, query: str) -> dict:
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
 
-		cache.setAPICache(ctx, query, queryData, "hangar")
+		cache.setAPICache(ctx, "hangarsearch.db", query, queryData)
 
 	queryData["hits"] = queryData.pop("result")
 	for hit in queryData["hits"]:

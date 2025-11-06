@@ -5,11 +5,6 @@ import logging, os, commons, cache, indexing, instance
 from typing import List, Protocol
 ctx = commons.ctx
 
-if not os.path.exists(os.path.join(ctx.config["cache-dir"], "modrinth-api")): # ts will not make it to version 3
-	os.makedirs(os.path.join(ctx.config["cache-dir"], "modrinth-api"))
-if not os.path.exists(os.path.join(ctx.config["cache-dir"], "hangar-api")):
-	os.makedirs(os.path.join(ctx.config["cache-dir"], "hangar-api"))
-
 logger = logging.getLogger(__name__)
 
 class ModType():
@@ -116,7 +111,7 @@ def addMod(ctx):
 				continue
 		if ctx.args["explicit"]:
 			continue
-		for dependency in mod.api_data["versions"][0]["dependencies"]:
+		for dependency in mod.api_data["versions"][0].get("dependencies", []):
 			if dependency["project_id"] in checked:
 				continue
 			dep_api_data = sources[mod.source].getAPI(ctx, dependency["project_id"])
@@ -197,8 +192,7 @@ def confirm(ctx, mods: List[ModType]):
 			for file in mod.getPath():
 				if os.path.exists(file):
 					os.path.getsize(file)
-
-	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods) if op == "download"  else 0
+	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods if "files" in mod.api_data) if op == "download" else 0
 
 	for mod in mods:
 		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][0]['version_number'] if op == 'download'  else None}")

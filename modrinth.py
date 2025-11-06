@@ -79,7 +79,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 	return matches
 
 def getAPI(ctx, slug: str) -> dict:
-	cacheData = cache.getAPICache(ctx, slug, "modrinth")
+	cacheData = cache.getAPICache(ctx, "modrinth.db", slug)
 	if cacheData:
 		modData = cacheData
 
@@ -102,9 +102,8 @@ def getAPI(ctx, slug: str) -> dict:
 			modData["versions"] = json.loads(buffer.decode("utf-8"))
 			response.close()
 
-			cache.setAPICache(ctx, slug, modData, "modrinth")
-			if slug != modData['slug']:
-				cache.setAPICache(ctx, modData['slug'], modData, "modrinth")
+			cache.setAPICache(ctx, "modrinth.db", modData['id'], modData)
+			cache.setAPICache(ctx, "modrinth.db", modData['slug'], modData)
 		except ZeroDivisionError:
 			modData = {"versions": []}
 
@@ -112,7 +111,7 @@ def getAPI(ctx, slug: str) -> dict:
 	return modData
 
 def searchAPI(ctx, query: str) -> dict:
-	cacheData = cache.getAPICache(ctx, query, "modrinth")
+	cacheData = cache.getAPICache(ctx, "modrinthsearch.db", query, )
 	if cacheData:
 		queryData = cacheData
 
@@ -130,7 +129,7 @@ def searchAPI(ctx, query: str) -> dict:
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
 
-		cache.setAPICache(ctx, query, queryData, "modrinth")
+		cache.setAPICache(ctx, "modrinthsearch.db", queryData)
 
 	for hit in queryData["hits"]:
 		hit["source"] = "modrinth"
