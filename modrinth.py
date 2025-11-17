@@ -6,7 +6,7 @@ import logging, os
 import pycurl, certifi, json
 import cache
 
-TAGS = ["SEARCH", "EXTERNAL"]
+TAGS = ["SEARCH", "SYNC"]
 BANG = "modrinth"
 DB = "modrinth.db"
 

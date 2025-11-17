@@ -20,7 +20,6 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 	index['version'] = mod_data['versions'][0]["version_number"]
 	index['version-id'] = mod_data["versions"][0]["id"]
 	index['type'] = mod_data['versions'][0].get("type", "")
-	index['folder'] = os.path.expanduser(os.path.join(ctx.instanceDir, mod_data['versions'][0]["folder"]))
 	index['source'] = source
 	index['game-version'] = ctx.instance["version"]
 	index['description'] = mod_data.get("description", "Description Not Provided")
@@ -28,7 +27,7 @@ def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
 		index['loader'] = mod_data['versions'][0]["loaders"][0] if ctx.instance["loader"] not in mod_data['versions'][0]["loaders"] else ctx.instance["loader"]
 	elif source == "hangar":
 		index['loader'] = ctx.instance["loader"]
-	index['filesize'] = mod_data['versions'][0]['files'][0]["size"] or 0
+	index['filesize'] = mod_data['versions'][0]['files'][0]["size"] if "files" in mod_data['versions'][0] else 0
 	index['date'] = time.ctime()
 	index['reason'] = reason
 

@@ -6,7 +6,7 @@ import logging, os
 import pycurl, certifi, json
 import cache
 
-TAGS = ["SEARCH", "EXTERNAL"]
+TAGS = ["SEARCH", "SYNC"]
 BANG = "hangar"
 DB = "hangar.db"
 
@@ -53,7 +53,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 			continue
 		version["folder"] = "plugins"
 		version["source"] = "hangar"
-		versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "dependencies": [], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
+		versionf = {"id": str(version["id"]), "version_number": version["name"], "name": version["name"], "files": [{"filename": version["downloads"]["PAPER"].get("fileInfo", {}).get("name") or f"{apiData['namespace']['slug']}-{version['name']}.jar", "size": version["downloads"]["PAPER"].get("fileInfo", {}).get("sizeBytes", 0), "url": version["downloads"]["PAPER"].get("downloadUrl") or version["downloads"]["PAPER"].get("externalUrl"), "hashes": {"sha256": version["downloads"]["PAPER"].get("fileInfo", {}).get("sha256Hash", "")}}], "folder": "plugins", "source": "hangar"}
 		versionf["date"] = version["createdAt"]
 		if ctx.instance["loader"] == "paper" or (ctx.instance["loader"] in ["folia", "purpur"] and ctx.config["allow-upstream"]) or (ctx.instance["loader"] == "folia" and "SUPPORTS_FOLIA" in version["settings"]["tags"]):
 			matchesbychannel[version["channel"]["name"].lower()].append(versionf)

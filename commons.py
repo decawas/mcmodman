@@ -134,12 +134,13 @@ elif not os.path.exists(config_file):
 else:
 	ctx.config = ConfigObj(config_file, unrepr=True)
 
-logger.info(ctx.config)
-
+if os.path.getsize(ctx.config["log-file"]) > 4194304:
+	os.remove(ctx.config["log-file"])
 logging.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
 
 logger.info("Config directory: %s", config_dir)
+logger.info(ctx.config)
 
 try:
 	ctx.args = parse_args()

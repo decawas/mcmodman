@@ -38,7 +38,7 @@ class ModType():
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
 
-	def getPath(self) -> str:
+	def getPath(self) -> list:
 		if self.index["index-version"] <= 4:
 			return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
 		else:
@@ -134,7 +134,7 @@ def addMod(ctx):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
-	installMod(ctx, mods)
+	installMod(ctx, mods, slugs)
 
 def removeMod(ctx, slugs=None):
 	if slugs is None:
@@ -173,9 +173,10 @@ def removeFinal(ctx, mods, suppressTranslation=False):
 			elif os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml")):
 				os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml"))
 
-			if os.path.exists(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
-				os.remove(os.path.join(mod.index["folder"], ".index", f"{mod.slug}.pw.toml"))
+			if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
+				os.remove(os.path.join( ctx.instanceDir,"mods", ".index", f"{mod.slug}.pw.toml"))
 		logger.info("Removed content '%s'", mod.slug)
+		assert not any([os.path.exists(path) for path in mod.index["files"]]), mod.slug # TODO: make if
 		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
 def confirm(ctx, mods: List[ModType]):
@@ -183,16 +184,16 @@ def confirm(ctx, mods: List[ModType]):
 	op = "remove" if ctx.args["operation"] == "remove" else "download"
 	totaloldsize = 0
 	for mod in mods:
-		if "size" in mod.index:
-			totaloldsize += mod.index["size"]
+		if "filesize" in mod.index:
+			totaloldsize += mod.index["filesize"]
 		elif mod.index["index-version"] <= 4:
 			if os.path.exists(mod.getPath()):
-				os.path.getsize(mod.getPath())
+				totaloldsize += os.path.getsize(mod.getPath())
 		else:
 			for file in mod.getPath():
 				if os.path.exists(file):
-					os.path.getsize(file)
-	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods if "files" in mod.api_data) if op == "download" else 0
+					totaloldsize += os.path.getsize(file)
+	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods if "files" in mod.api_data["versions"][0]) if op == "download" else sum(mod.index.get("filesize", 0) for mod in mods)
 
 	for mod in mods:
 		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][0]['version_number'] if op == 'download'  else None}")
@@ -220,14 +221,14 @@ def queryMod(ctx):
 		if not ctx.args["info"]:
 			print(f"{mod.slug} {mod.index['version']}")
 		else:
-			print(f"Name{':'.rjust(13, ' ')} {mod.slug}")
-			print(f"Version{':'.rjust(10, ' ')} {mod.index['version']}")
-			print(f"Source{':'.rjust(11, ' ')} {mod.index['source']}")
-			print(f"Description{':'.rjust(6, ' ')} {mod.index['description']}\n" if 'description' in mod.index else "", end="")
-			print(f"Loader{':'.rjust(11, ' ')} {mod.index['loader']}\n" if 'loader' in mod.index else "", end="")
-			print(f"Installed Size{':'.rjust(3, ' ')} {convertBytes(mod.index['filesize'])}\n" if 'filesize' in mod.index else "", end="")
-			print(f"Install Date{':'.rjust(5, ' ')} {mod.index['date']}\n" if "date" in mod.index else "", end="")
-			print(f"Install Reason{':'.rjust(3, ' ')} {mod.index['reason']}")
+			print(f"Name            : {mod.slug}")
+			print(f"Version         : {mod.index['version']}")
+			print(f"Source          : {mod.index['source']}")
+			print(f"Description     : {mod.index['description']}\n" if 'description' in mod.index else "", end="")
+			print(f"Loader          : {mod.index['loader']}\n" if 'loader' in mod.index else "", end="")
+			print(f"Installed Size  : {convertBytes(mod.index['filesize'])}\n" if 'filesize' in mod.index else "", end="")
+			print(f"Install Date    : {mod.index['date']}\n" if "date" in mod.index else "", end="")
+			print(f"Install Reason  : {mod.index['reason']}")
 			print("")
 
 def listAll(ctx) -> list:
@@ -248,7 +249,6 @@ def searchMod(ctx):
 	query = ctx.args["query"]
 	logger.info("Getting search data for query '%s'", query)
 	queryData = {source: sources[source].searchAPI for source in sources if "SEARCH" in sources[source].TAGS}
-	queryData = {"modrinth": modrinth.searchAPI(ctx, query), "hangar": hangar.searchAPI(ctx, query)}
 	if not queryData["modrinth"]["hits"] and not queryData["hangar"]["hits"]:
 		print(f"No results found for query '{query}'")
 		logger.info("No results found for query '%s'", query)
@@ -268,8 +268,8 @@ def downgradeMod(ctx):
 	mods = [ModType(slug) for slug in slugs]
 	for mod in mods:
 		versions = []
-		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "EXTERNAL" in sources[source].TAGS}
-		for source in [source for source in sources if "EXTERNAL" in sources[source].TAGS]:
+		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "SYNC" in sources[source].TAGS}
+		for source in [source for source in sources if "SYNC" in sources[source].TAGS]:
 			if not isinstance(mod.api_data[source], dict):
 				continue
 			mod.api_data[source]["versions"] = sources[source].parseAPI(ctx, mod.api_data[source])
@@ -303,9 +303,9 @@ def downgradeMod(ctx):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
 
-	installMod(ctx, mods)
+	installMod(ctx, mods, slugs)
 
-def installMod(ctx, mods):
+def installMod(ctx, mods, slugs):
 	toignore = []
 	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
 	for mod in mods:
@@ -313,16 +313,17 @@ def installMod(ctx, mods):
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
 				toignore.append(mod.slug)
-		removeFinal(ctx, mods, True)
+		removeFinal(ctx, [mod], True)
 		if mod.slug in ["connector", "cardboard"]:
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 
 		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
-		cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename'])
+		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename']) if "folder" in mod.api_data["versions"][0] else "" 
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
+		assert all([os.path.exists(path) for path in mod.api_data["versions"][0]["filepaths"]]), f"{mod.slug} {[file for file in mod.api_data["versions"][0]["filepaths"] if not os.path.exists(file)]}" # TODO: make if
 	progress.close()
 
 	if ctx.args["ignore"]:
@@ -337,7 +338,7 @@ def convertBytes(size):
 		if -1024 < size < 1024:
 			break
 		size /= 1024.0
-	return f"{size:.2f} {unit}"
+	return f"{size:.2f} {unit}" if unit != "B" else f"{int(size):.2f} {unit}"
 
 class LockExistsError(Exception):
 	"error: could not lock instance: File Exists"
@@ -358,7 +359,7 @@ class sourceagnostic: # a fake source that looks up other sources
 	TAGS = []
 	@staticmethod
 	def getAPI(ctx, slug):
-		apiData = {source: sources[source].getAPI(ctx, slug) for source in sources if "EXTERNAL" in sources[source].TAGS}
+		apiData = {source: sources[source].getAPI(ctx, slug) for source in sources if "SYNC" in sources[source].TAGS}
 		toremove = [source for source in apiData if not isinstance(apiData[source], dict)]
 		for source in toremove:
 			del apiData[source]
@@ -393,9 +394,12 @@ class SourceAbstract(Protocol):
 	@staticmethod
 	def searchAPI(ctx: commons.Context, query: str) -> dict: ...
 
-if ctx.args["operation"] in ["sync", "upgrade", "search", "downgrade"]: # only import sources when needed
+if ctx.args["operation"] in ["sync", "upgrade", "search", "downgrade", "clear-cache"]: # only import sources when needed
 	import modrinth, hangar, local, tqdm
 	sources: dict[str, SourceAbstract] = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
+
+def cc_wrap(ctx):
+	cache.clearCache(ctx, sources)
 
 if __name__ == "__main__":
 	try:
@@ -410,7 +414,7 @@ if __name__ == "__main__":
 				logger.info("mcmodman.lock file already exists, exiting")
 				raise LockExistsError("mcmodman is already running for this instance")
 
-		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cache.clearCache, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
+		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cc_wrap, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "version": lambda _: print(commons.__version__)}
 		operations[ctx.args["operation"]](ctx)
 	except KeyboardInterrupt:
