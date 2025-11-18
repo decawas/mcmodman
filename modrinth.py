@@ -130,7 +130,7 @@ def searchAPI(ctx, query: str) -> dict:
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
 
-		cache.setAPICache(ctx, "modrinthsearch.db", queryData)
+		cache.setAPICache(ctx, "modrinthsearch.db", query, queryData)
 
 	for hit in queryData["hits"]:
 		hit["source"] = "modrinth"

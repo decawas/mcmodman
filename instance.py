@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 def instanceFirstrun(ctx):
 	instance = ConfigObj(unrepr=True, encoding='utf-8')
+	if not any([file in os.listdir(ctx.instanceDir) for file in ["options.txt", "server.properties", "latest.log"]]):
+		print("this directory does not appear to be an instance")
+		raise SystemExit
 	if os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "options.txt"))):
 		instance["type"] = "client"
 		instance["modfolder"] = "mods"
@@ -121,7 +124,6 @@ def instanceMeta(ctx):
 		print("Usage: mcmodman --instance <add|select|remove|list|export>")
 		logger.error("--instance flag missing arguments")
 		return
-	print(ctx.args)
 	if ctx.args["suboperation"] == "add":
 		if ctx.args["name"] is None or ctx.args["path"] is None:
 			print("Usage: mcmodman --instance add <name> <path>")

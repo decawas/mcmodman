@@ -248,8 +248,8 @@ def toggleMod(ctx):
 def searchMod(ctx):
 	query = ctx.args["query"]
 	logger.info("Getting search data for query '%s'", query)
-	queryData = {source: sources[source].searchAPI for source in sources if "SEARCH" in sources[source].TAGS}
-	if not queryData["modrinth"]["hits"] and not queryData["hangar"]["hits"]:
+	queryData = {source: sources[source].searchAPI(ctx, query) for source in sources if "SEARCH" in sources[source].TAGS}
+	if not any([bool(queryData[source]["hits"]) for source in queryData]):
 		print(f"No results found for query '{query}'")
 		logger.info("No results found for query '%s'", query)
 		return
