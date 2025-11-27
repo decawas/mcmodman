@@ -1,6 +1,7 @@
 """
 main logic, and functions with front-end functionality
 """
+from ast import Mod
 import logging, os, commons, cache, indexing, instance
 from typing import List, Protocol
 ctx = commons.ctx
@@ -33,7 +34,7 @@ class ModType():
 		if self.index["index-version"] <= 4:
 			return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
 		else:
-			return True if os.path.exists(os.path.join(f"{self.index['files'][0]}.disabled")) else False if os.path.exists(self.index['files'][0]) else None
+			return True if os.path.exists(f"{self.index['files'][0]}.disabled") else False if os.path.exists(self.index['files'][0]) else None
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
@@ -77,6 +78,7 @@ def addMod(ctx):
 		raise NoTargetsError
 	slugs = list(set(slugs))
 	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
+	mods: List[ModType] = [mod for mod in mods if mod.source in sources]
 
 	i, toremove, checked = -1, [], []
 	for mod in mods:
@@ -176,7 +178,6 @@ def removeFinal(ctx, mods, suppressTranslation=False):
 			if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
 				os.remove(os.path.join( ctx.instanceDir,"mods", ".index", f"{mod.slug}.pw.toml"))
 		logger.info("Removed content '%s'", mod.slug)
-		assert not any([os.path.exists(path) for path in mod.index["files"]]), mod.slug # TODO: make if
 		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
 def confirm(ctx, mods: List[ModType]):
@@ -249,7 +250,7 @@ def searchMod(ctx):
 	query = ctx.args["query"]
 	logger.info("Getting search data for query '%s'", query)
 	queryData = {source: sources[source].searchAPI(ctx, query) for source in sources if "SEARCH" in sources[source].TAGS}
-	if not any([bool(queryData[source]["hits"]) for source in queryData]):
+	if not any(bool(queryData[source]["hits"]) for source in queryData):
 		print(f"No results found for query '{query}'")
 		logger.info("No results found for query '%s'", query)
 		return
@@ -269,7 +270,10 @@ def downgradeMod(ctx):
 	for mod in mods:
 		versions = []
 		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "SYNC" in sources[source].TAGS}
-		for source in [source for source in sources if "SYNC" in sources[source].TAGS]:
+		mod.api_data = {source: mod.api_data[source] for source in mod.api_data if mod.api_data[source] != 500}
+		if not mod.api_data:
+			raise TargetNotFoundError(mod.slug)
+		for source in [source for source in mod.api_data]:
 			if not isinstance(mod.api_data[source], dict):
 				continue
 			mod.api_data[source]["versions"] = sources[source].parseAPI(ctx, mod.api_data[source])
@@ -281,6 +285,7 @@ def downgradeMod(ctx):
 		for version in versions:
 			version["date"] = version.get("date_published", version.get("createdAt", 0))
 		mod.api_data["versions"] = sorted(versions, key=lambda x: x['date'], reverse=True)
+
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
 			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(ctx, mod.slug, ctx.instance["loader"], version['version_number'], ctx.instance["version"]) else ''
@@ -318,18 +323,16 @@ def installMod(ctx, mods, slugs):
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 
-		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data)
+		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
 		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename']) if "folder" in mod.api_data["versions"][0] else "" 
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
-		assert all([os.path.exists(path) for path in mod.api_data["versions"][0]["filepaths"]]), f"{mod.slug} {[file for file in mod.api_data["versions"][0]["filepaths"] if not os.path.exists(file)]}" # TODO: make if
 	progress.close()
 
 	if ctx.args["ignore"]:
-		slugs = ctx.args["slugs"] if slugs is None else slugs
-		for slug in slugs:
-			ctx.instance["ignored-mods"].append(slug)
+		for slug in toignore:
+			ctx.instance["ignored-mods"] = ctx.instance.get("ignored-mods", []).append(slug)
 		ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
 		ctx.instance.write()
 
@@ -394,6 +397,7 @@ class SourceAbstract(Protocol):
 	@staticmethod
 	def searchAPI(ctx: commons.Context, query: str) -> dict: ...
 
+sources = {}
 if ctx.args["operation"] in ["sync", "upgrade", "search", "downgrade", "clear-cache"]: # only import sources when needed
 	import modrinth, hangar, local, tqdm
 	sources: dict[str, SourceAbstract] = {"local": local, "modrinth": modrinth, "hangar": hangar, "sourceagnostic": sourceagnostic}
@@ -439,7 +443,7 @@ if __name__ == "__main__":
 		logger.critical(e)
 		raise
 	except Exception as e: # allows for removing the lock file when an unhandled error occurs
-		print(f"{ctx.color.ERROR}An unexpected error occured, {e}{ctx.color.NORMAL}")
+		print(f"{ctx.color.ERROR}An unexpected error occurred, {e}{ctx.color.NORMAL}")
 		logger.critical(e)
 		raise
 	finally:

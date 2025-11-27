@@ -10,7 +10,7 @@ TAGS = ["SEARCH", "SYNC"]
 BANG = "hangar"
 DB = "hangar.db"
 
-def getMod(ctx, slug: str, modData: dict) -> list:
+def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
 		print(f"Using cached version for plugin '{slug}'")
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
@@ -35,7 +35,8 @@ def getMod(ctx, slug: str, modData: dict) -> list:
 			if not modData['versions'][0]['files'][0].get("hashes"):
 				print(f"warning: could not verify mod {slug}, no checksum provided")
 			else:
-				print("Checking hash")
+				if progress is not None:
+					progress.write("Checking hash")
 				with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
 					checksum = sha256(f.read()).hexdigest()
 				if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:

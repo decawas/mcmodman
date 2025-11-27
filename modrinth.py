@@ -10,7 +10,7 @@ TAGS = ["SEARCH", "SYNC"]
 BANG = "modrinth"
 DB = "modrinth.db"
 
-def getMod(ctx, slug: str, modData: dict) -> list:
+def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 	else:
@@ -31,7 +31,8 @@ def getMod(ctx, slug: str, modData: dict) -> list:
 			perfcheck = True
 
 		if perfcheck:
-			print("Checking hash")
+			if progress is not None:
+				progress.write("Checking hash")
 			with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
 				checksum = sha512(f.read()).hexdigest()
 			if modData["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
