@@ -34,6 +34,8 @@ class ModType():
 		if self.index["index-version"] <= 4:
 			return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
 		else:
+			if not self.index['files']:
+				return False
 			return True if os.path.exists(f"{self.index['files'][0]}.disabled") else False if os.path.exists(self.index['files'][0]) else None
 
 	def isInstalled(self) -> bool:
@@ -118,7 +120,9 @@ def addMod(ctx):
 				continue
 			dep_api_data = sources[mod.source].getAPI(ctx, dependency["project_id"])
 			reason = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
-			progress.write(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}' ({'required' if reason == 'dependency' else reason})\n" if not ModType.modInstalled(dep_api_data['slug']) else "", end="")
+			progress.write(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}'", end="")
+			progress.write(f" ({'required' if reason == 'dependency' else reason})", end="")
+			progress.write(f" [installed]\n" if ModType.modInstalled(dep_api_data['slug']) else "\n", end="")
 			checked.extend([dependency["project_id"], dep_api_data["slug"]])
 			dep = ModType(dep_api_data["slug"], reason)
 			dep.api_data = dep_api_data
@@ -167,7 +171,7 @@ def removeFinal(ctx, mods, suppressTranslation=False):
 			elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
 				os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
 		else:
-			for file in [file for file in mod.getPath() if os.path.exists(file)]:
+			for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
 				os.remove(file)
 		if mod.isInstalled():
 			if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")):
@@ -438,10 +442,6 @@ if __name__ == "__main__":
 	except TargetNotFoundError as e:
 		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} target not found: {e}")
 		logger.critical("user gave target that doesnt exist")
-	except RuntimeError as e:
-		print(f"{ctx.color.ERROR}An error occurred while running mcmodman{ctx.color.NORMAL}")
-		logger.critical(e)
-		raise
 	except Exception as e: # allows for removing the lock file when an unhandled error occurs
 		print(f"{ctx.color.ERROR}An unexpected error occurred, {e}{ctx.color.NORMAL}")
 		logger.critical(e)
