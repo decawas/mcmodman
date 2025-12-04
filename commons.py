@@ -6,7 +6,7 @@ import logging, os, sys, appdirs
 from typing import Any
 from configobj import ConfigObj
 
-__version__ = "25.49rc2"
+__version__ = "25.49rc3"
 logger = logging.getLogger(__name__)
 
 def parse_args():

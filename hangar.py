@@ -31,18 +31,17 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 		else:
 			perfcheck = True
 
-		if perfcheck and modData['versions'][0]['files'][0].get("hashes"):
-			if not modData['versions'][0]['files'][0].get("hashes"):
-				print(f"warning: could not verify mod {slug}, no checksum provided")
-			else:
-				if progress is not None:
-					progress.write("Checking hash")
-				with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
-					checksum = sha256(f.read()).hexdigest()
-				if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
-					print("Failed to validate file")
-					os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
-					raise ChecksumError
+		if not perfcheck or not modData['versions'][0]['files'][0].get("hashes"):
+			print(f"warning: could not verify mod {slug}, no checksum provided\n" if perfcheck else "", end="")
+		else:
+			if progress is not None:
+				progress.write("Checking hash")
+			with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), 'rb') as f:
+				checksum = sha256(f.read()).hexdigest()
+			if modData['versions'][0]['files'][0]['hashes']['sha256'] != checksum:
+				print("Failed to validate file")
+				os.remove(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']))
+				raise ChecksumError
 
 		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 	return [os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])]
@@ -63,7 +62,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("snapshot") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
 	if not matches:
-		logger.error("No matching versions found for mod '%s", apiData['namespace']['slug'])
+		logger.error("No matching versions found for mod '%s'", apiData['namespace']['slug'])
 		return "No version"
 	return matches
 
@@ -107,7 +106,7 @@ def searchAPI(ctx, query: str) -> dict:
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying hangar with query '{query}'")
-		url = f"https://hangar.papermc.io/api/v1/projects?sort=downloads&platform=paper&q={query.replace(' ', '+')}&version={ctx.instance["version"]}"
+		url = f"https://hangar.papermc.io/api/v1/projects?sort=downloads&platform=paper&q={query.replace(' ', '+')}&version={ctx.instance['version']}"
 		buffer = bytearray()
 		response = pycurl.Curl()
 		response.setopt(response.URL, url)

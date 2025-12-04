@@ -4,7 +4,7 @@ cache related functions
 
 from shutil import copyfile
 from time import time
-import logging, os, configobj, sqlite3, json
+import logging, os, sqlite3, json
 
 APICACHEVERSION = 5
 preserve = {}
@@ -16,6 +16,7 @@ def isAPICached(ctx, db: str, slug: str) -> bool:
 	except sqlite3.OperationalError:
 		return False
 	if cacheData is None:
+		db.close()
 		return False
 	preserve[slug] = json.loads(cacheData[3])
 	db.close()
@@ -27,7 +28,6 @@ def isModCached(ctx, slug: str, loader: str, mod_version: str, game_version: str
 def getAPICache(ctx, db: str, slug: str) -> dict:
 	if not isAPICached(ctx, db, slug):
 		return False
-	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
 	if slug in preserve:
 		cacheData = preserve[slug]
 	else:
@@ -98,6 +98,5 @@ def clearModCache(ctx):
 	for file in os.listdir(os.path.join(ctx.config["cache-dir"], "mods")):
 		os.remove(os.path.join(ctx.config["cache-dir"], "mods", file))
 		print(f"Deleted content cache for {file}")
-		logger.info("Deleted content cache for %s (clear content cache)", {file})
-
+		logger.info("Deleted content cache for %s (clear content cache)", file)
 logger = logging.getLogger(__name__)

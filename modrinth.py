@@ -106,7 +106,7 @@ def getAPI(ctx, slug: str) -> dict:
 
 			cache.setAPICache(ctx, "modrinth.db", modData['id'], modData)
 			cache.setAPICache(ctx, "modrinth.db", modData['slug'], modData)
-		except ZeroDivisionError:
+		except:
 			modData = {"versions": []}
 
 	modData["source"] = "modrinth"

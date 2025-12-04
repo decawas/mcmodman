@@ -1,7 +1,6 @@
 """
 main logic, and functions with front-end functionality
 """
-from ast import Mod
 import logging, os, commons, cache, indexing, instance
 from typing import List, Protocol
 ctx = commons.ctx
@@ -18,14 +17,20 @@ class ModType():
 		if self.index.get("source") is not None:
 			self.source = self.index["source"]
 		elif "/" in slug:
-			for source in [source for source in sources if hasattr(sources[source], "BANG")]:
-				if not slug.startswith(f"{sources[source].BANG}/"):
-					continue
-				self.source = source
-				self.slug = slug[len(f"{sources[source].BANG}/"):]
-				break
+			if any(self.slug.endswith(ext) for ext in (".jar", ".zip")):
+				self.source = "local"
+			else:
+				if self.slug.split("/")[0] not in [sources[source].BANG for source in sources if hasattr(sources[source], "BANG")]:
+					raise SourceNotFoundError(self.slug.split("/")[0])
+				for source in [source for source in sources if hasattr(sources[source], "BANG")]:
+					if not slug.startswith(f"{sources[source].BANG}/"):
+						continue
+					self.source = source
+					self.slug = slug[len(f"{sources[source].BANG}/"):]
+					break
+
 		else:
-			self.source = "local" if any(self.slug.endswith(ext) for ext in (".jar", ".zip")) else "sourceagnostic"
+			self.source = "sourceagnostic"
 
 	def isIgnored(self) -> bool:
 		return self.slug in ctx.config["ignored-mods"]
@@ -336,7 +341,7 @@ def installMod(ctx, mods, slugs):
 
 	if ctx.args["ignore"]:
 		for slug in toignore:
-			ctx.instance["ignored-mods"] = ctx.instance.get("ignored-mods", []).append(slug)
+			ctx.instance["ignored-mods"] = ctx.instance.get("ignored-mods", []) + [slug]
 		ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
 		ctx.instance.write()
 
@@ -353,6 +358,10 @@ class NoValidVersions(Exception):
 	"error: could not find any valid versions"
 class NoTargetsError(Exception):
 	"error: no targets specified"
+class SourceNotFoundError(Exception):
+	def __init__(self, message):
+		self.message = message
+		super().__init__(self.message)
 class TargetNotFoundError(Exception):
 	def __init__(self, message):
 		self.message = message
@@ -442,6 +451,9 @@ if __name__ == "__main__":
 	except TargetNotFoundError as e:
 		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} target not found: {e}")
 		logger.critical("user gave target that doesnt exist")
+	except SourceNotFoundError as e:
+		print(f"{ctx.color.ERROR}error:{ctx.color.NORMAL} source not found: {e}")
+		logger.critical("user gave source that doesnt exist")
 	except Exception as e: # allows for removing the lock file when an unhandled error occurs
 		print(f"{ctx.color.ERROR}An unexpected error occurred, {e}{ctx.color.NORMAL}")
 		logger.critical(e)
