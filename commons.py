@@ -6,7 +6,7 @@ import logging, os, sys, appdirs
 from typing import Any
 from configobj import ConfigObj
 
-__version__ = "25.49rc3"
+__version__ = "25.49rc4"
 logger = logging.getLogger(__name__)
 
 def parse_args():
@@ -106,13 +106,13 @@ class Context():
 
 ctx = Context()
 
-config_dir = appdirs.user_config_dir("ekno/mcmodman")
+config_dir = os.path.join(appdirs.user_config_dir(), "ekno", "mcmodman")
 exe_dir = os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else os.path.abspath(__file__))
 
 if not os.path.exists(config_dir):
 	os.makedirs(config_dir)
 
-config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(appdirs.user_config_dir("ekno/mcmodman"), "mcmodman.conf")))
+config_file = os.getenv("MCMMCONFIG", os.path.expanduser(os.path.join(appdirs.user_config_dir(), "ekno", "mcmodman", "mcmodman.conf")))
 if os.path.exists(os.path.join(config_dir, "config.toml")) and not os.path.exists(config_file):
 	import tomlkit
 	with open(os.path.join(config_dir, "config.toml"), "r") as f:
@@ -127,7 +127,7 @@ elif not os.path.exists(config_file):
 	if not os.path.exists(os.path.join(exe_dir, "config-template.ini")):
 		raise FileNotFoundError
 	ctx.config = ConfigObj(os.path.join(exe_dir, "config-template.ini"), unrepr=True)
-	ctx.config["cache-dir"] = appdirs.user_cache_dir("ekno/mcmodman")
+	ctx.config["cache-dir"] = os.path.join(appdirs.user_cache_dir(), "ekno", "mcmodman")
 	ctx.config["log-file"] = os.path.join(config_dir, "mcmodman.log")
 	ctx.config.filename = config_file
 	ctx.config.write()
@@ -164,7 +164,7 @@ if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.ex
 	os.remove(os.path.join(config_dir, "instances.toml"))
 elif not os.path.exists(ctx.instanceDir):
 	ctx.instance = ConfigObj(unrepr=True, encoding='utf-8')
-	ctx.instance["dotminecraft"] = {"name": ".minecraft", "path": "~/%AppData%/roaming/.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
+	ctx.instance["dotminecraft"] = {"name": ".minecraft", "path": "%AppData%\\roaming\\.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
 	ctx.instance.filename = ctx.instanceDir
 	ctx.instance.write()
 else:
