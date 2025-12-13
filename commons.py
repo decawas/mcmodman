@@ -6,7 +6,7 @@ import logging, os, sys, appdirs
 from typing import Any
 from configobj import ConfigObj
 
-__version__ = "25.49rc4"
+__version__ = "v25.50"
 logger = logging.getLogger(__name__)
 
 def parse_args():
@@ -134,7 +134,7 @@ elif not os.path.exists(config_file):
 else:
 	ctx.config = ConfigObj(config_file, unrepr=True)
 
-if os.path.getsize(ctx.config["log-file"]) > 4194304:
+if os.path.exists(ctx.config["log-file"]) and os.path.getsize(ctx.config["log-file"]) > 4194304:
 	os.remove(ctx.config["log-file"])
 logging.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
 logger.info("Starting mcmodman version %s", __version__)
