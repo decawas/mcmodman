@@ -11,7 +11,7 @@ BANG = "modrinth"
 DB = "modrinth.db"
 
 def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
-	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]):
+	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"]): 
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][0]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 	else:
 		with open(os.path.join(ctx.instanceDir, modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename']), "wb") as f:
@@ -45,7 +45,7 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 
 def parseAPI(ctx, apiData: dict) -> list:
 	ptype, folder = projectGetType(ctx, apiData)
-	if ptype == "modpack":
+	if ptype in ["modpack", "minecraft_java_server"]:
 		print(f"{apiData['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
