@@ -332,6 +332,8 @@ def installMod(ctx, mods, slugs):
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 
+		if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][0].get("folder", "mods"))):
+			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][0].get("folder", "mods")))
 		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
 		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename']) if "folder" in mod.api_data["versions"][0] else "" 
