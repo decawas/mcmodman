@@ -129,6 +129,8 @@ elif not os.path.exists(config_file):
 	ctx.config = ConfigObj(os.path.join(exe_dir, "config-template.ini"), unrepr=True)
 	ctx.config["cache-dir"] = os.path.join(appdirs.user_cache_dir(), "ekno", "mcmodman")
 	ctx.config["log-file"] = os.path.join(config_dir, "mcmodman.log")
+	ctx.config["instances"] = {}
+	ctx.config["instances"]["dotminecraft"] = {"name": ".minecraft", "path": os.path.expanduser("%AppData%\\roaming\\.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft")}
 	ctx.config.filename = config_file
 	ctx.config.write()
 else:
@@ -151,26 +153,22 @@ except Exception as e:
 	logger.critical("invalid option")
 	raise
 
-ctx.instanceDir = ctx.config.get("instances-file", os.path.join(config_dir, "instances.ini"))
-if os.path.exists(os.path.join(config_dir, "instances.toml")) and not os.path.exists(ctx.instanceDir):
-	import tomlkit
-	with open(os.path.join(config_dir, "instances.toml"), "r") as f:
-		oldinstances = tomlkit.load(f)
-	ctx.instance = ConfigObj(unrepr=True, encoding='utf-8')
-	ctx.instance.filename = ctx.instanceDir
-	for value in oldinstances:
-		ctx.instance[value] = oldinstances[value]
-	ctx.instance.write()
-	os.remove(os.path.join(config_dir, "instances.toml"))
-elif not os.path.exists(ctx.instanceDir):
-	ctx.instance = ConfigObj(unrepr=True, encoding='utf-8')
-	ctx.instance["dotminecraft"] = {"name": ".minecraft", "path": "%AppData%\\roaming\\.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft"}
-	ctx.instance.filename = ctx.instanceDir
-	ctx.instance.write()
-else:
-	ctx.instance = ConfigObj(ctx.instanceDir, unrepr=True)
-
-logger.info("instances %s", ctx.instance)
+if "instances" not in ctx.config:
+	ctx.config["instances"]  = {}
+	ctx.instanceDir = ctx.config.get("instances-file", os.path.join(config_dir, "instances.ini"))
+	if not any([os.path.exists(ctx.instanceDir), os.path.exists(os.path.join(config_dir, "instances.toml"))]):
+		ctx.config["instances"]["dotminecraft"] = {"name": ".minecraft", "path": os.path.expanduser("%AppData%\\roaming\\.minecraft" if "win" in sys.platform else "~/Library/Application Support/minecraft" if "darwin" in sys.platform else "~/.minecraft")}
+	elif os.path.exists(ctx.instanceDir):
+		instance = ConfigObj(unrepr=True, encoding='utf-8')
+		ctx.config["instances"] = dict(instance)
+		os.remove(ctx.instanceDir)
+	elif os.path.exists(os.path.join(config_dir, "instances.toml")):
+		import tomlkit
+		with open(os.path.join(config_dir, "instances.toml"), "r") as f:
+			instance = tomlkit.load(f)
+		ctx.config["instances"] = instance
+		os.remove(os.path.join(config_dir, "instances.toml"))
+	ctx.config.write()
 
 logger.info("Cache directory: %s", ctx.config["cache-dir"])
 if not os.path.exists(ctx.config["cache-dir"]):
@@ -179,13 +177,13 @@ if not os.path.exists(ctx.config["cache-dir"]):
 
 class color():
 	NORMAL = "\033[0m"
-	INPUT = "\033[94m" if ctx.args["color"] or ctx.config.get("Color", False) else "\033[0m"
-	ERROR = "\033[91m" if ctx.args["color"] or ctx.config.get("Color", False) else "\033[0m"
+	INPUT = "\033[94m" if ctx.args["color"] or ctx.config.get("Color", False) or ctx.config.get("color", False) else "\033[0m"
+	ERROR = "\033[91m" if ctx.args["color"] or ctx.config.get("Color", False) or ctx.config.get("color", False) else "\033[0m"
 ctx.color = color()
 
 if ctx.args["operation"] != "instance":
-	if ctx.config["selected-instance"] in ctx.instance:
-		ctx.instanceDir = os.path.expanduser(ctx.instance[ctx.config["selected-instance"]]["path"])
+	if ctx.config["selected-instance"] in ctx.config["instances"]:
+		ctx.instanceDir = os.path.expanduser(ctx.config["instances"][ctx.config["selected-instance"]]["path"])
 	else:
 		print("selected instance not found")
 		raise SystemExit

@@ -129,16 +129,16 @@ def instanceMeta(ctx):
 			print("Usage: mcmodman --instance add <name> <path>")
 			logger.error("--instance flag missing arguments")
 			return
-		if ctx.args["name"] in ctx.instance.keys():
+		if ctx.args["name"] in ctx.config["instances"].keys():
 			print(f"Instance '{ctx.args['name']}' already exists")
 			return
 
-		ctx.instance[ctx.args["name"]] = {"name": ctx.args["name"], "path": ctx.args["path"]}
-		ctx.instance.write()
+		ctx.config["instances"][ctx.args["name"]] = {"name": ctx.args["name"], "path": ctx.args["path"]}
+		ctx.config.write()
 		print(f"Added instance '{ctx.args['name']}'")
 		return
 	if ctx.args["suboperation"] == "select":
-		if ctx.args["name"] in ctx.instance:
+		if ctx.args["name"] in ctx.config["instances"]:
 			ctx.config["selected-instance"] = ctx.args["name"]
 			ctx.config.write()
 			print(f"Selected instance '{ctx.args['name']}'")
@@ -152,17 +152,17 @@ def instanceMeta(ctx):
 		for i, instance in enumerate(ctx.config["instances"]):
 			if instance["name"] == ctx.args["name"]:
 				del ctx.config["instances"][i]
-				ctx.instance.write()
+				ctx.config.write()
 				print(f"Deleted instance '{ctx.args['name']}'")
 				return
 		print(f"Instance '{ctx.args['name']}' not found")
 		return
 	if ctx.args["suboperation"] == "list":
-		for name in list(ctx.instance.keys()):
+		for name in list(ctx.config["instances"].keys()):
 			print(name, "*" if name == ctx.config["selected-instance"] else "")
 		return
 	if ctx.args["suboperation"] == "export":
-		for mod in [file[:-8] if file.endswith(".mm.toml") else file[:-7] for file in os.listdir(os.path.join(ctx.instance[ctx.config["selected-instance"]]["path"], ".content"))]:
+		for mod in [file[:-8] if file.endswith(".mm.toml") else file[:-7] for file in os.listdir(os.path.join(ctx.config["instances"][ctx.config["selected-instance"]]["path"], ".content"))]:
 			print(mod, end=" ")
 		print("")
 		
