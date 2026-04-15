@@ -11,7 +11,10 @@ class ModType():
 	def __init__(self, slug: str, reason: str="explicit"):
 		self.slug = slug
 		self.api_data = {}
-		self.index: dict = indexing.get(ctx, slug, "explicit" if ctx.args["asexplicit"] else "dependency" if ctx.args["asdeps"] else reason)
+		if "=" in self.slug:
+			self.selectedversion = self.slug[self.slug.rfind("=") + 1:]
+			self.slug = self.slug[:self.slug.rfind("=")]
+		self.index: dict = indexing.get(ctx, self.slug, "explicit" if ctx.args["asexplicit"] else "dependency" if ctx.args["asdeps"] else reason)
 		if self.index is None:
 			raise TargetNotFoundError(slug)
 		if self.index.get("source") is not None:
@@ -84,17 +87,17 @@ def addMod(ctx):
 	if not slugs:
 		raise NoTargetsError
 	slugs = list(set(slugs))
-	mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
-	mods: List[ModType] = [mod for mod in mods if mod.source in sources]
+	ctx.mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
+	ctx.mods: List[ModType] = [mod for mod in ctx.mods if mod.source in sources]
 
 	i, toremove, checked = -1, [], []
-	for mod in mods:
+	for mod in ctx.mods:
 		_ = checked.extend([mod.slug, mod.index["mod-id"]]) if "mod-id" in mod.index else checked.extend([mod.slug])
-	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}", unit="mods")
-	while i < len(mods) - 1:
+	progress = tqdm.tqdm(total=len(ctx.mods), desc=f"total {len(ctx.mods)}", unit="mods")
+	while i < len(ctx.mods) - 1:
 		progress.update(1)
 		i += 1
-		mod = mods[i]
+		mod = ctx.mods[i]
 		if not mod.api_data: # skip redundant get for dependencies
 			mod.api_data = sources[mod.source].getAPI(ctx, mod.slug)
 		if not isinstance(mod.api_data, dict):
@@ -102,6 +105,18 @@ def addMod(ctx):
 		mod.source = mod.api_data["source"]
 		logger.info("Successfully got api data for mod '%s'", mod.slug)
 		mod.api_data["versions"] = sources[mod.source].parseAPI(ctx, mod.api_data)
+		if hasattr(mod, "selectedversion"):
+			for i, version in enumerate(mod.api_data["versions"]):
+				if mod.selectedversion == version["id"] or mod.selectedversion == version["version_number"]:
+					mod.api_data["selectedversion"] = i
+					break
+			if "selectedversion" not in mod.api_data:
+				raise TargetNotFoundError(mod.selectedversion)
+		else:
+			mod.api_data["selectedversion"] = 0
+		if mod.slug == "minecraft" and "minecraft" not in ctx.args["slugs"]:
+			toremove.append(mod)
+			continue
 		checked.extend([mod.slug, mod.api_data["id"]])
 		if mod.isInstalled() and mod.isDisabled():
 			progress.write(f"mod '{mod.slug}' is disabled, skipping")
@@ -111,16 +126,16 @@ def addMod(ctx):
 			toremove.append(mod)
 			continue
 		if mod.source == "local":
-			mod.slug = mod.api_data["versions"][0]["slug"]
+			mod.slug = mod.api_data["versions"][mod.api_data["selectedversion"]]["slug"]
 			mod.index = indexing.get(ctx, mod.slug)
-		elif mod.api_data["versions"][0]["id"] == mod.index["version-id"]:
+		elif mod.api_data["versions"][mod.api_data["selectedversion"]]["id"] == mod.index["version-id"]:
 			progress.write(f"Mod '{mod.slug}' already up to date, {'skipping' if ctx.args['operation'] == 'upgrade' or mod.slug not in ctx.args['slugs'] else 'reinstalling'}")
 			if ctx.args["operation"] == "upgrade" or mod.slug not in ctx.args["slugs"]:
 				toremove.append(mod)
 				continue
 		if ctx.args["explicit"]:
 			continue
-		for dependency in mod.api_data["versions"][0].get("dependencies", []):
+		for dependency in mod.api_data["versions"][mod.api_data["selectedversion"]].get("dependencies", []):
 			if dependency["project_id"] in checked:
 				continue
 			dep_api_data = sources[mod.source].getAPI(ctx, dependency["project_id"])
@@ -132,38 +147,39 @@ def addMod(ctx):
 			dep = ModType(dep_api_data["slug"], reason)
 			dep.api_data = dep_api_data
 			if dependency['dependency_type'] != 'optional' or ctx.config["get-optional-dependencies"] or ctx.args["optional"]:
-				mods.append(dep)
-			progress.total = len(mods)
+				ctx.mods.append(dep)
+			progress.total = len(ctx.mods)
 			progress.refresh()
 	progress.close()
 
 	for mod in toremove:
-		mods.remove(mod)
-	if not mods:
+		ctx.mods.remove(mod)
+	
+	if not ctx.mods:
 		print("all mods are up to date")
 		return
 
-	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 
-	installMod(ctx, mods, slugs)
+	installMod(ctx, slugs)
 
 def removeMod(ctx, slugs=None):
 	if slugs is None:
 		slugs = [] + ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
-	mods = [ModType(slug) for slug in slugs]
+	ctx.mods = [ModType(slug) for slug in slugs]
 
-	if all(not mod.isInstalled() for mod in mods):
+	if all(not mod.isInstalled() for mod in ctx.mods):
 		print("no mods found")
 		return
-	for mod in mods:
+	for mod in ctx.mods:
 		if not mod.isInstalled():
 			raise TargetNotFoundError(mod.slug)
 
-	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 	
-	removeFinal(ctx, mods)
+	removeFinal(ctx, ctx.mods)
 
 def removeFinal(ctx, mods, suppressTranslation=False):
 	for mod in mods:
@@ -189,11 +205,11 @@ def removeFinal(ctx, mods, suppressTranslation=False):
 		logger.info("Removed content '%s'", mod.slug)
 		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
-def confirm(ctx, mods: List[ModType]):
+def confirm(ctx):
 	print("")
 	op = "remove" if ctx.args["operation"] == "remove" else "download"
 	totaloldsize = 0
-	for mod in mods:
+	for mod in ctx.mods:
 		if "filesize" in mod.index:
 			totaloldsize += mod.index["filesize"]
 		elif mod.index["index-version"] <= 4:
@@ -203,10 +219,10 @@ def confirm(ctx, mods: List[ModType]):
 			for file in mod.getPath():
 				if os.path.exists(file):
 					totaloldsize += os.path.getsize(file)
-	totalnewsize = sum(mod.api_data["versions"][0]["files"][0]["size"] for mod in mods if "files" in mod.api_data["versions"][0]) if op == "download" else sum(mod.index.get("filesize", 0) for mod in mods)
+	totalnewsize = sum(mod.api_data["versions"][mod.api_data["selectedversion"]]["files"][0]["size"] for mod in ctx.mods if "files" in mod.api_data["versions"][0]) if op == "download" else sum(mod.index.get("filesize", 0) for mod in ctx.mods)
 
-	for mod in mods:
-		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][0]['version_number'] if op == 'download'  else None}")
+	for mod in ctx.mods:
+		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][mod.api_data["selectedversion"]]['version_number'] if op == 'download'  else None}")
 	print(f"\nTotal {op} size: {convertBytes(totalnewsize if op == 'download' else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
 	yn = input(f"\n{ctx.color.INPUT}::{ctx.color.NORMAL} Proceed with download? [Y/n]: ")
@@ -217,8 +233,8 @@ def confirm(ctx, mods: List[ModType]):
 
 def queryMod(ctx):
 	slugs = listAll(ctx) if not ctx.args["slugs"] else ctx.args["slugs"]
-	mods = [ModType(slug) for slug in slugs]
-	for mod in mods:
+	ctx.mods = [ModType(slug) for slug in slugs]
+	for mod in ctx.mods:
 		if not mod.isInstalled():
 			print(f"mod {mod.slug} is not installed")
 			continue
@@ -235,8 +251,8 @@ def queryMod(ctx):
 			print(f"Version         : {mod.index['version']}")
 			print(f"Source          : {mod.index['source']}")
 			print(f"Description     : {mod.index['description']}\n" if 'description' in mod.index else "", end="")
-			print(f"Loader          : {mod.index['loader']}\n" if 'loader' in mod.index else "", end="")
-			print(f"Installed Size  : {convertBytes(mod.index['filesize'])}\n" if 'filesize' in mod.index else "", end="")
+			if mod.index['loader'] != "": print(f"Loader          : {mod.index['loader']}\n" if 'loader' in mod.index else "", end="")
+			if mod.index['filesize'] != 0: print(f"Installed Size  : {convertBytes(mod.index['filesize'])}\n" if 'filesize' in mod.index else "", end="")
 			print(f"Install Date    : {mod.index['date']}\n" if "date" in mod.index else "", end="")
 			print(f"Install Reason  : {mod.index['reason']}")
 			print("")
@@ -251,8 +267,8 @@ def toggleMod(ctx):
 	slugs = ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
-	mods = [ModType(slug) for slug in slugs]
-	for mod in mods:
+	ctx.mods = [ModType(slug) for slug in slugs]
+	for mod in ctx.mods:
 		mod.toggle()
 
 def searchMod(ctx):
@@ -275,8 +291,9 @@ def downgradeMod(ctx):
 	slugs = [] + ctx.args["slugs"]
 	if not slugs:
 		raise NoTargetsError
-	mods = [ModType(slug) for slug in slugs]
-	for mod in mods:
+	ctx.mods = [ModType(slug) for slug in slugs]
+	for mod in ctx.mods:
+		mod.api_data["selectedversion"] = 0
 		versions = []
 		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "SYNC" in sources[source].TAGS}
 		mod.api_data = {source: mod.api_data[source] for source in mod.api_data if mod.api_data[source] != 500}
@@ -310,19 +327,19 @@ def downgradeMod(ctx):
 		if mod.api_data["versions"][choice]["id"] == mod.index["version-id"]:
 			raise InvalidChoice("Invalid choice, the selected version is already installed")
 
-		mod.api_data['versions'][0] = mod.api_data['versions'][choice]
-		mod.source = mod.api_data['versions'][0]["source"]
-		mod.api_data[mod.source]["versions"][0] = mod.api_data["versions"][0]
+		mod.source = mod.api_data['versions'][choice]["source"]
+		mod.api_data[mod.source]["versions"][choice] = mod.api_data["versions"][choice]
 		mod.api_data = mod.api_data[mod.source]
+		mod.api_data["selectedversion"] = choice
 
-	_ = "" if ctx.args["noconfirm"] else confirm(ctx, mods)
+	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 
-	installMod(ctx, mods, slugs)
+	installMod(ctx, slugs)
 
-def installMod(ctx, mods, slugs):
+def installMod(ctx, slugs):
 	toignore = []
-	progress = tqdm.tqdm(total=len(mods), desc=f"total {len(mods)}")
-	for mod in mods:
+	progress = tqdm.tqdm(total=len(ctx.mods), desc=f"total {len(ctx.mods)}")
+	for mod in ctx.mods:
 		if ctx.args["ignore"] and not mod.isIgnored():
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
@@ -332,11 +349,11 @@ def installMod(ctx, mods, slugs):
 			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
 			ctx.instance.write()
 
-		if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][0].get("folder", "mods"))):
-			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][0].get("folder", "mods")))
-		mod.api_data["versions"][0]["filepaths"] = sources[mod.api_data["versions"][0].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
-		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][0]["source"])
-		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][0]['version_number'], ctx.instance["version"], mod.api_data["versions"][0]["folder"], mod.api_data["versions"][0]['files'][0]['filename']) if "folder" in mod.api_data["versions"][0] else "" 
+		if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods"))):
+			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods")))
+		mod.api_data["versions"][mod.api_data["selectedversion"]]["filepaths"] = sources[mod.api_data["versions"][mod.api_data["selectedversion"]].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
+		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][mod.api_data["selectedversion"]]["source"])
+		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][mod.api_data["selectedversion"]]['version_number'], ctx.instance["version"], mod.api_data["versions"][mod.api_data["selectedversion"]]["folder"], mod.api_data["versions"][mod.api_data["selectedversion"]]['files'][0]['filename']) if "folder" in mod.api_data["versions"][mod.api_data["selectedversion"]] else "" 
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
 	progress.close()
