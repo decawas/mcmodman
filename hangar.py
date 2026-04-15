@@ -89,9 +89,9 @@ def getAPI(ctx, slug: str) -> dict:
 		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25")
 		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 		response.perform()
-		modData["versions"] = json.loads(buffer.decode("utf-8"))
+		modData["versions"] = json.loads(buffer.decode("utf-8"))["result"]
 		response.close()
-		cache.setAPICache(ctx, "hangar.db", modData["slug"], modData)
+		cache.setAPICache(ctx, "hangar.db", modData["namespace"]["slug"].lower(), modData)
 		cache.setAPICache(ctx, "hangar.db", modData["id"], modData)
 
 	modData["source"] = "hangar"
