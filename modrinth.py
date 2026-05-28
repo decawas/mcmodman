@@ -11,7 +11,7 @@ BANG = "modrinth"
 DB = "modrinth.db"
 
 def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
-	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"]): 
+	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"]):
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
 	else:
 		with open(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), "wb") as f:
@@ -44,27 +44,47 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 	return [os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])]
 
 def parseAPI(ctx, apiData: dict) -> list:
-	ptype, folder = projectGetType(ctx, apiData)
-	if ptype in ["modpack", "minecraft_java_server"]:
+	if "modpack" in apiData["project_types"] or "minecraft_java_server" in apiData["project_types"]:
 		print(f"{apiData['slug']} is a modpack")
 		logger.error("mcmodman does not currently support modpacks, skipping")
 		return "Modpack"
 
-	mod_loader = ctx.instance["loader"] if ptype == "mod" else apiData["loaders"][0] if ptype in ["shader", "resourcepack"] else "datapack" if ptype == "datapack" else ""
-	if ptype in ["shader", "resourcepack"] and ctx.instance["type"] != "client":
-		print(f"{ptype}s do not work on servers, skipping")
-		logger.warning("content of type '%s' can not be used on servers", ptype)
-		return ptype
-	if ptype == "datapack" and ctx.instance["type"] != "world":
-		print("mcmodman only supports datapacks for worlds, skipping")
-		logger.warning("content of type '%s' can only be used on worlds", ptype)
-		return ptype
+	if "mod" in apiData["project_types"]:
+		if ctx.instance["type"] == "world" and "datapack" not in apiData["project_types"]:
+			print("worlds do not support mods for worlds, skipping")
+			logger.warning("content of type 'mod' can not be used on worlds")
+			return "mod"
+		mod_loader = ctx.instance["loader"]
+		folder = os.path.join(ctx.instanceDir, "mods")
+	if "plugins" in apiData["project_types"]:
+		if ctx.instance["type"] == "world" and "datapack" not in apiData["project_types"]:
+			print("worlds do not support plugins for worlds, skipping")
+			logger.warning("content of type 'plugins' can not be used on worlds")
+			return "plugin"
+		mod_loader = ctx.instance["loader"]
+		folder = os.path.join(ctx.instanceDir, "plugins")
+	if "shader" in apiData["project_types"] or "resourcepack" in apiData["project_types"]:
+		if ctx.instance["type"] != "client":
+			print(f"{"shaderpacks" if "shader" in apiData["project_types"] else "resourcepacks"} do not work on servers or worlds, skipping")
+			logger.warning("content of type '%s' can not be used on servers or worlds", apiData["project_types"][0])
+			return apiData["project_types"][0]
+		mod_loader = apiData["loaders"][0]
+		folder = os.path.join(ctx.instanceDir, "shaderpacks" if "shader" in apiData["project_types"] else "resourcepacks")
+	if "datapack" in apiData["project_types"] and "mod_loader" not in locals():
+		if ctx.instance["type"] != "world":
+			print("datapacks are only for worlds, skipping")
+			logger.warning("content of type 'datapack' can only be used on worlds")
+			return "datapack"
+		mod_loader = "datapack"
+		folder = os.path.join(ctx.instanceDir, "datapacks")
+	if "mod_loader" not in locals():
+		return "unknown type"
 
 	matchesbychannel: dict = {"release": [], "beta": [], "alpha": [], "translation": []}
 	for version in apiData["versions"]:
 		version["source"] = "modrinth"
 		version["date"] = version["date_published"]
-		version["type"] = ptype
+		version["type"] = os.path.basename(folder)[:-1]
 		if ctx.instance["version"] in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams[mod_loader] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = os.path.basename(folder)
 			matchesbychannel[version["version_type"]].append(version)
@@ -78,6 +98,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 	if not matches:
 		logger.error("No matching versions found for mod '%s'", apiData['slug'])
 		return "No version"
+	apiData["description"] = apiData["summary"]
 	return matches
 
 def getAPI(ctx, slug: str) -> dict:
@@ -90,7 +111,7 @@ def getAPI(ctx, slug: str) -> dict:
 		try:
 			buffer = bytearray()
 			response = pycurl.Curl()
-			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}")
+			response.setopt(response.URL, f"https://api.modrinth.com/v3/project/{slug}")
 			response.setopt(response.CAINFO, certifi.where())
 			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 			response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
@@ -99,7 +120,7 @@ def getAPI(ctx, slug: str) -> dict:
 				return 500
 			modData = json.loads(buffer.decode("utf-8"))
 			buffer = bytearray()
-			response.setopt(response.URL, f"https://api.modrinth.com/v2/project/{slug}/version")
+			response.setopt(response.URL, f"https://api.modrinth.com/v3/project/{slug}/version")
 			response.perform()
 			modData["versions"] = json.loads(buffer.decode("utf-8"))
 			response.close()
@@ -120,7 +141,7 @@ def searchAPI(ctx, query: str) -> dict:
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying modrinth with query '{query}'")
-		url = f'https://api.modrinth.com/v2/search?limit=48&index=downloads&query={query.replace(' ', '+')}'
+		url = f'https://api.modrinth.com/v3/search?limit=48&index=downloads&query={query.replace(' ', '+')}'
 		buffer = bytearray()
 		response = pycurl.Curl()
 		response.setopt(response.URL, url)
@@ -135,23 +156,8 @@ def searchAPI(ctx, query: str) -> dict:
 
 	for hit in queryData["hits"]:
 		hit["source"] = "modrinth"
-
+		hit["description"] = hit["summary"]
 	return queryData
-
-def projectGetType(ctx, apiData):
-	if apiData["project_type"] == "modpack":
-		ptype = "modpack"
-		folder = ""
-	elif apiData["project_type"] in ["shader", "resourcepack"]:
-		ptype = apiData["project_type"]
-		folder = os.path.join(ctx.instanceDir, "shaderpacks" if apiData["project_type"] == "shader" else "resourcepacks")
-	elif apiData["project_type"] == "mod":
-		ptype = "mod"
-		folder = os.path.join(ctx.instanceDir, ctx.instance["modfolder"])
-	else:
-		raise ValueError
-
-	return ptype, folder
 
 logger = logging.getLogger(__name__)
 

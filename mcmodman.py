@@ -306,7 +306,7 @@ def downgradeMod(ctx):
 			if isinstance(mod.api_data[source].get("versions"), str):
 				continue
 			if not versions:
-				mod.api_data["type"] = mod.api_data[source]["project_type"]
+				mod.api_data["type"] = mod.api_data[source]["project_types"][0]
 			versions.extend(mod.api_data[source]["versions"])
 		for version in versions:
 			version["date"] = version.get("date_published", version.get("createdAt", 0))
