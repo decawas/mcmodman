@@ -9,30 +9,29 @@ logger = logging.getLogger(__name__)
 
 class ModType():
 	def __init__(self, slug: str, reason: str="explicit"):
+		self.source = None
+		if "/" in slug:
+			if any(slug.endswith(ext) for ext in (".jar", ".zip")):
+				self.source = "local"
+			elif slug.split("/")[0] not in [sources[source].BANG for source in sources if hasattr(sources[source], "BANG")]:
+				raise SourceNotFoundError(slug.split("/")[0])
+			for source in [source for source in sources if hasattr(sources[source], "BANG")]:
+				if not slug.startswith(f"{sources[source].BANG}/"):
+					continue
+				slug = slug[len(f"{sources[source].BANG}/"):]
+				self.source = source
+				break
 		self.slug = slug
-		self.api_data = {}
 		if "=" in self.slug:
 			self.selectedversion = self.slug[self.slug.rfind("=") + 1:]
 			self.slug = self.slug[:self.slug.rfind("=")]
+		self.api_data = {}
 		self.index: dict = indexing.get(ctx, self.slug, "explicit" if ctx.args["asexplicit"] else "dependency" if ctx.args["asdeps"] else reason)
 		if self.index is None:
 			raise TargetNotFoundError(slug)
 		if self.index.get("source") is not None:
 			self.source = self.index["source"]
-		elif "/" in slug:
-			if any(self.slug.endswith(ext) for ext in (".jar", ".zip")):
-				self.source = "local"
-			else:
-				if self.slug.split("/")[0] not in [sources[source].BANG for source in sources if hasattr(sources[source], "BANG")]:
-					raise SourceNotFoundError(self.slug.split("/")[0])
-				for source in [source for source in sources if hasattr(sources[source], "BANG")]:
-					if not slug.startswith(f"{sources[source].BANG}/"):
-						continue
-					self.source = source
-					self.slug = slug[len(f"{sources[source].BANG}/"):]
-					break
-
-		else:
+		if self.source is None:
 			self.source = "sourceagnostic"
 
 	def isIgnored(self) -> bool:
@@ -106,9 +105,9 @@ def addMod(ctx):
 		logger.info("Successfully got api data for mod '%s'", mod.slug)
 		mod.api_data["versions"] = sources[mod.source].parseAPI(ctx, mod.api_data)
 		if hasattr(mod, "selectedversion"):
-			for i, version in enumerate(mod.api_data["versions"]):
+			for j, version in enumerate(mod.api_data["versions"]):
 				if mod.selectedversion == version["id"] or mod.selectedversion == version["version_number"]:
-					mod.api_data["selectedversion"] = i
+					mod.api_data["selectedversion"] = j
 					break
 			if "selectedversion" not in mod.api_data:
 				raise TargetNotFoundError(mod.selectedversion)
@@ -154,14 +153,14 @@ def addMod(ctx):
 
 	for mod in toremove:
 		ctx.mods.remove(mod)
-	
+
 	if not ctx.mods:
 		print("all mods are up to date")
 		return
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 
-	installMod(ctx, slugs)
+	installMod(ctx)
 
 def removeMod(ctx, slugs=None):
 	if slugs is None:
@@ -178,7 +177,7 @@ def removeMod(ctx, slugs=None):
 			raise TargetNotFoundError(mod.slug)
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
-	
+
 	removeFinal(ctx, ctx.mods)
 
 def removeFinal(ctx, mods, suppressTranslation=False):
@@ -334,9 +333,9 @@ def downgradeMod(ctx):
 
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 
-	installMod(ctx, slugs)
+	installMod(ctx)
 
-def installMod(ctx, slugs):
+def installMod(ctx):
 	toignore = []
 	progress = tqdm.tqdm(total=len(ctx.mods), desc=f"total {len(ctx.mods)}")
 	for mod in ctx.mods:
@@ -353,7 +352,7 @@ def installMod(ctx, slugs):
 			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods")))
 		mod.api_data["versions"][mod.api_data["selectedversion"]]["filepaths"] = sources[mod.api_data["versions"][mod.api_data["selectedversion"]].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][mod.api_data["selectedversion"]]["source"])
-		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][mod.api_data["selectedversion"]]['version_number'], ctx.instance["version"], mod.api_data["versions"][mod.api_data["selectedversion"]]["folder"], mod.api_data["versions"][mod.api_data["selectedversion"]]['files'][0]['filename']) if "folder" in mod.api_data["versions"][mod.api_data["selectedversion"]] else "" 
+		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][mod.api_data["selectedversion"]]['version_number'], ctx.instance["version"], mod.api_data["versions"][mod.api_data["selectedversion"]]["folder"], mod.api_data["versions"][mod.api_data["selectedversion"]]['files'][0]['filename']) if "folder" in mod.api_data["versions"][mod.api_data["selectedversion"]] else ""
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
 	progress.close()
@@ -369,7 +368,7 @@ def convertBytes(size):
 		if -1024 < size < 1024:
 			break
 		size /= 1024.0
-	return f"{size:.2f} {unit}" if unit != "B" else f"{int(size):.2f} {unit}"
+	return f"{size:.2f} {unit}" if unit != "B" else f"{int(size)} {unit}"
 
 class LockExistsError(Exception):
 	"error: could not lock instance: File Exists"
