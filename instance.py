@@ -1,11 +1,12 @@
 """
 Instance management functions for mcmodman
 """
-import os, re, json, logging
+import os, re
+import logger as logging
 from configobj import ConfigObj
 import cache
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 def instanceFirstrun(ctx):
 	instance = ConfigObj(unrepr=True, encoding='utf-8')
@@ -29,10 +30,11 @@ def instanceFirstrun(ctx):
 		instance["loader"] = "datapack"
 		instance["modfolder"] = "datapacks"
 		cacheData = cache.getAPICache(ctx, "prismarine.db", "protocol")
+		import json
 		if cacheData:
 			versionData = cacheData["api"]
 		else:
-			import pycurl, certifi, json
+			import pycurl, certifi
 			buffer = bytearray()
 			response = pycurl.Curl()
 			response.setopt(response.URL, "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json")
@@ -58,7 +60,7 @@ def instanceFirstrun(ctx):
 		print("error: selected instance does not appear to be a minecraft instance")
 	if instance["type"] != "world" and not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "logs", "latest.log"))):
 		print("instance must be run at least once before using mcmodman")
-	
+
 	instance["index-compatibility"] = compdetect(ctx)
 	
 	instance.filename = os.path.join(ctx.instanceDir, "mcmodman_managed.ini")
@@ -149,12 +151,12 @@ def instanceMeta(ctx):
 		if ctx.args["name"] == ctx.config["selected-instance"]:
 			print("cant delete selected instance")
 			return
-		for i, instance in enumerate(ctx.config["instances"]):
-			if instance["name"] == ctx.args["name"]:
-				del ctx.config["instances"][i]
-				ctx.config.write()
-				print(f"Deleted instance '{ctx.args['name']}'")
-				return
+		if ctx.args["name"] in ctx.config["instances"].keys():
+			del ctx.config["instances"][ctx.args["name"]]
+			ctx.config.write()
+			print(f"Deleted instance '{ctx.args['name']}'")
+			logger.info("Deleted instance %s", ctx.args["name"])
+			return
 		print(f"Instance '{ctx.args['name']}' not found")
 		return
 	if ctx.args["suboperation"] == "list":
@@ -165,4 +167,3 @@ def instanceMeta(ctx):
 		for mod in [file[:-8] if file.endswith(".mm.toml") else file[:-7] for file in os.listdir(os.path.join(ctx.config["instances"][ctx.config["selected-instance"]]["path"], ".content"))]:
 			print(mod, end=" ")
 		print("")
-		

@@ -1,5 +1,10 @@
 from shutil import copyfile, SameFileError
-import logging, os, json, yaml, zipfile, tomlkit
+import os, json
+import logger as logging
+
+_yaml = None
+_zipfile = None
+_tomlkit = None
 
 TAGS = []
 BANG = "local"
@@ -32,6 +37,9 @@ def parseAPI(ctx, apiData: dict) -> list:
 def getAPI(ctx, filename: str) -> dict:
 	if "/" not in filename:
 		return {"source": "local", "id": ""}
+	if _zipfile is None:
+		import zipfile
+		_zipfile = zipfile
 	with zipfile.ZipFile(filename, "r") as mod:
 		moddir = mod.namelist()
 		if "fabric.mod.json" in moddir:
@@ -41,11 +49,17 @@ def getAPI(ctx, filename: str) -> dict:
 			modData["from"] = "fabric.mod.json"
 			modData["slug"] = modData["id"]
 		elif "META-INF/mods.toml" in moddir:
+			if _tomlkit is None:
+				import tomlkit
+				_tomlkit = tomlkit
 			with mod.open('META-INF/mods.toml') as data:
 				modData = tomlkit.loads(data.read().decode("utf-8"))
 			modData["project_type"] = "mod"
 			modData["from"] = "mods.toml"
 		elif "plugin.yml" in moddir:
+			if _yaml is None:
+				import yaml
+				_yaml = yaml
 			with mod.open('plugin.yml') as data:
 				modData = yaml.load(data.read().decode("utf-8"), yaml.CSafeLoader)
 			modData["project_type"] = "plugin"

@@ -1,96 +1,77 @@
 """
 defines common variables, and meta-instance functions
 """
-import argparse
-import logging, os, sys, appdirs
+import logger as logging
+import os, sys, appdirs
 from typing import Any
 from configobj import ConfigObj
 
-__version__ = "v25.50"
-logger = logging.getLogger(__name__)
+__version__ = "v26.26"
+logger = logging.getLogger()
+logger.info("Starting mcmodman version %s", __version__)
 
 def parse_args():
-	parser = argparse.ArgumentParser(description="mcmodman command line interface")
-	ops = parser.add_mutually_exclusive_group(required=True)
-	ops.add_argument("-S", "--sync", action="store_true", help="Sync mods")
-	ops.add_argument("-U", "--upgrade", action="store_true", help="Upgrade mods")
-	ops.add_argument("-R", "--remove", action="store_true", help="Remove mods")
-	ops.add_argument("-T", "--toggle", action="store_true", help="Toggle mods")
-	ops.add_argument("-Q", "--query", action="store_true", help="Query mods")
-	ops.add_argument("-D", "--downgrade", action="store_true", help="Downgrade mods")
-	
-	ops.add_argument("-F", "--search", action="store_true", help="Search mods")
-	ops.add_argument("--cc", nargs='?', const=True, metavar="SUBOPERATION", help="Clear cache")
-	ops.add_argument("--instance", nargs="+", metavar=("SUBOPERATION", "NAME", "PATH"), help="Instance operations")
-	ops.add_argument("--version", action="store_true")
+	for arg in sys.argv:
+		if "mcmodman" in arg:
+			args = sys.argv[sys.argv.index(arg) + 1:]
+			break
 
-	asexpldeps = parser.add_mutually_exclusive_group()
-	asexpldeps.add_argument("--asexplicit", action="store_true", help="Define newly installed mods as explicit, even if they are dependencies")
-	asexpldeps.add_argument("--asdeps", action="store_true", help="Define newly installed mods as dependencies, even if they are installed explicitly")
+	shortflags = "".join([arg.replace("-", "") for arg in args if arg.startswith("-") and not arg.startswith("--")])
+	longflags = [arg.replace("--", "") for arg in args if arg.startswith("--")]
+	slugs = [arg for arg  in args if not arg.startswith("-")]
 
-	parser.add_argument("-a", "--all", action="store_true", help="Apply to all")
-	parser.add_argument("-e", "--explicit", action="store_true", help="Explicit")
-	parser.add_argument("-d", "--dependency", action="store_true", help="Dependency")
-	parser.add_argument("-p", "--optional", action="store_true", help="Optional")
-	parser.add_argument("-y", "--noconfirm", action="store_true", help="Skip the confirmation dialogue, does not skip the ignore question in downgrade")
-	parser.add_argument("-c", "--color", action="store_true", help="Enable colour output")
-	parser.add_argument("-i", "--info", action="store_true", help="Display information for a given mod")
-	parser.add_argument("--ignore", action="store_true", help="Ignore mods")
-	parser.add_argument("slugs", nargs="*", help="Mod slugs to operate on")
-
-	try:
-		args = parser.parse_args()
-	except TypeError:
-		print("error: no operation specified")
-		logger.critical("no operation")
+	ops = [flag for flag in longflags if flag in ["sync", "upgrade", "downgrade", "remove", "toggle", "query", "search", "cc", "instance", "version"]]
+	ops.extend([flag for flag in shortflags if flag in ["S", "U", "D", "R", "T", "Q", "F"]])
+	if len(ops) > 1:
+		print("error: only use one operation at a time")
+		logger.error("user used multiple operations: %s", ops)
 		raise SystemExit
-	result = {}
-	if args.sync:
-		result["operation"] = "sync"
-		result["slugs"] = args.slugs
-	elif args.upgrade:
-		result["operation"] = "upgrade"
-		result["slugs"] = args.slugs
-	elif args.remove:
-		result["operation"] = "remove"
-		result["slugs"] = args.slugs
-	elif args.toggle:
-		result["operation"] = "toggle"
-		result["slugs"] = args.slugs
-	elif args.query:
-		result["operation"] = "query"
-		result["slugs"] = args.slugs
-	elif args.downgrade:
-		result["operation"] = "downgrade"
-		result["slugs"] = args.slugs
-	elif args.ignore:
-		result["operation"] = "ignore"
-		result["slugs"] = args.slugs
-	elif args.search:
-		result["operation"] = "search"
-		result["query"] = " ".join(args.slugs)
-	elif args.version:
-		result["operation"] = "version"
-	elif args.cc:
-		result["operation"] = "clear-cache"
-		result["suboperation"] = args.cc or ""
-	elif args.instance:
-		result["operation"] = "instance"
-		result["suboperation"] = args.instance[0]
-		result["name"] = args.instance[1] if len(args.instance) > 1 else None
-		result["path"] = args.instance[2] if len(args.instance) > 2 else None
+	if not ops:
+		print("error: no operation specified")
+		logger.error("user did not specify an operation")
+		raise SystemExit
+	
+	if "asdeps" in longflags and "asexplicit" in longflags: raise SystemExit
+	
+	if ops[0] in ["instance", "version"] and slugs:
+		print(f"error: this operation takes 0 arguments, {len(slugs)} given")
+		logger.error("user gave too many arguments")
+		raise SystemExit
 
-	result["all"] = args.all
-	result["explicit"] = args.explicit
-	result["dependency"] = args.dependency
-	result["optional"] = args.optional
-	result["noconfirm"] = args.noconfirm
-	result["color"] = args.color
-	result["asexplicit"] = args.asexplicit
-	result["asdeps"] = args.asdeps
-	result["info"] = args.info
-	result["ignore"] = args.ignore
-	return result
+	args = {}
+	if ops[0] in ["S", "sync"]: args["operation"] = "sync"
+	elif ops[0] in ["U", "upgrade"]: args["operation"] = "upgrade"
+	elif ops[0] in ["D", "downgrade"]: args["operation"] = "downgrade"
+	elif ops[0] in ["R", "remove"]: args["operation"] = "remove"
+	elif ops[0] in ["F", "search"]: args["operation"] = "search"
+	elif ops[0] in ["Q", "query"]: args["operation"] = "query"
+	elif ops[0] in ["T", "toggle"]: args["operation"] = "toggle"
+	elif ops[0] in ["instance", "version"]: args["operation"] = ops[0]
+	elif ops[0] in ["cc"]: args["operation"] = "clear-cache"
+
+	args["asexplicit"] = "asexplicit" in longflags
+	args["asdeps"] = "asdeps" in longflags
+
+	if args["operation"] == "search":
+		args["query"] = " ".join(slugs)
+	elif args["operation"] == "clear-cache":
+		args["suboperation"] = "" if not slugs else slugs[0]
+	elif args["operation"] == "instance":
+		args["suboperation"] = slugs[0]
+		args["name"] = slugs[1] if len(slugs) > 1 else None
+		args["path"] = slugs[2] if len(slugs) > 2 else None
+	else:
+		args["slugs"] = slugs
+
+	args["all"] = "a" in shortflags or "all" in longflags
+	args["explicit"] = "e" in shortflags or "explicit" in longflags
+	args["dependency"] = "d" in shortflags or "dependency" in longflags
+	args["optional"] = "p" in shortflags or "optional" in longflags
+	args["noconfirm"] = "y" in shortflags or "noconfirm" in longflags
+	args["color"] = "c" in shortflags or "color" in longflags
+	args["info"] = "i" in shortflags or "info" in longflags
+	args["ignore"] = "ignore" in longflags
+	return args
 
 class InvalidOption(Exception):
 	"error: invalid option"
@@ -138,16 +119,15 @@ else:
 
 if os.path.exists(ctx.config["log-file"]) and os.path.getsize(ctx.config["log-file"]) > 4194304:
 	os.remove(ctx.config["log-file"])
-logging.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
-logger.info("Starting mcmodman version %s", __version__)
+logger.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
 
-logger.info("Config directory: %s", config_dir)
-logger.info(ctx.config)
+logger.debug("Config directory: %s", config_dir)
+logger.debug(ctx.config)
 
 try:
 	ctx.args = parse_args()
 	ctx.lockneeded = ctx.args["operation"] in ["sync", "upgrade", "remove", "toggle", "downgrade"]
-	logger.info("Arguments: %s", ctx.args)
+	logger.debug("Arguments: %s", ctx.args)
 except Exception as e:
 	print("error: invalid option")
 	logger.critical("invalid option")
@@ -181,7 +161,7 @@ class color():
 	ERROR = "\033[91m" if ctx.args["color"] or ctx.config.get("Color", False) or ctx.config.get("color", False) else "\033[0m"
 ctx.color = color()
 
-if ctx.args["operation"] != "instance":
+if ctx.args["operation"] != "instance" or (ctx.args["operation"] == "instance" and ctx.args["suboperation"] == "export"):
 	if ctx.config["selected-instance"] in ctx.config["instances"]:
 		ctx.instanceDir = os.path.expanduser(ctx.config["instances"][ctx.config["selected-instance"]]["path"])
 	else:

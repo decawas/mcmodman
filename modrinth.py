@@ -2,24 +2,25 @@
 modrinth api functions
 """
 from hashlib import sha512
-import logging, os
+import logger as logging
+import os
 import pycurl, certifi, json
 import cache
 
-TAGS = ["SEARCH", "SYNC"]
+TAGS = ["SEARCH", "SYNC", "DOWNGRADE"]
 BANG = "modrinth"
 DB = "modrinth.db"
 
 def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"]):
-		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData['versions'][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])
 	else:
 		with open(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), "wb") as f:
 			response = pycurl.Curl()
 			response.setopt(response.URL, f"{modData['versions'][modData["selectedversion"]]['files'][0]['url']}")
 			response.setopt(response.CAINFO, certifi.where())
 			response.setopt(response.WRITEDATA, f)
-			response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
+			response.setopt(response.USERAGENT, "mcmodman (https://codeberg.org/ekno/mcmodman)")
 			response.perform()
 			response.close()
 
@@ -35,12 +36,12 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 				progress.write("Checking hash")
 			with open(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), 'rb') as f:
 				checksum = sha512(f.read()).hexdigest()
-			if modData["versions"][0]["files"][0]["hashes"]["sha512"] != checksum:
+			if modData["versions"][modData["selectedversion"]]["files"][0]["hashes"]["sha512"] != checksum:
 				print("Failed to validate file")
 				os.remove(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData["versions"][modData["selectedversion"]]['files'][0]['filename']))
 				raise ChecksumError
 
-		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData["versions"][0]["folder"], modData['versions'][0]['files'][0]['filename'])
+		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData["versions"][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])
 	return [os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])]
 
 def parseAPI(ctx, apiData: dict) -> list:
@@ -51,7 +52,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 
 	if "mod" in apiData["project_types"]:
 		if ctx.instance["type"] == "world" and "datapack" not in apiData["project_types"]:
-			print("worlds do not support mods for worlds, skipping")
+			print("mods are not supported for worlds, skipping")
 			logger.warning("content of type 'mod' can not be used on worlds")
 			return "mod"
 		mod_loader = ctx.instance["loader"]
@@ -107,7 +108,7 @@ def getAPI(ctx, slug: str) -> dict:
 		modData = cacheData
 
 	if "modData" not in locals():
-		logger.info("Could not find valid cache data for mod %s fetching api data for mod %s from modrinth", slug, slug)
+		logger.info("Could not find valid cache data for mod %s fetching api data from modrinth", slug)
 		try:
 			buffer = bytearray()
 			response = pycurl.Curl()
@@ -127,9 +128,9 @@ def getAPI(ctx, slug: str) -> dict:
 
 			cache.setAPICache(ctx, "modrinth.db", modData['id'], modData)
 			cache.setAPICache(ctx, "modrinth.db", modData['slug'], modData)
-		except:
+		except pycurl.error:
 			modData = {"versions": []}
-
+	
 	modData["source"] = "modrinth"
 	return modData
 
@@ -147,7 +148,7 @@ def searchAPI(ctx, query: str) -> dict:
 		response.setopt(response.URL, url)
 		response.setopt(response.CAINFO, certifi.where())
 		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
-		response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
+		response.setopt(response.USERAGENT, "mcmodman (https://codeberg.org/ekno/mcmodman)")
 		response.perform()
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
@@ -159,7 +160,7 @@ def searchAPI(ctx, query: str) -> dict:
 		hit["description"] = hit["summary"]
 	return queryData
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 class ChecksumError(Exception):
 	"error: a mod failed the checksum"

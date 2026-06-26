@@ -1,11 +1,12 @@
 """
 main logic, and functions with front-end functionality
 """
-import logging, os, commons, cache, indexing, instance
+import logger as logging
+import os, commons, cache, indexing, instance
 from typing import List, Protocol
 ctx = commons.ctx
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 class ModType():
 	def __init__(self, slug: str, reason: str="explicit"):
@@ -157,7 +158,7 @@ def addMod(ctx):
 	if not ctx.mods:
 		print("all mods are up to date")
 		return
-
+	
 	_ = "" if ctx.args["noconfirm"] else confirm(ctx)
 
 	installMod(ctx)
@@ -294,7 +295,7 @@ def downgradeMod(ctx):
 	for mod in ctx.mods:
 		mod.api_data["selectedversion"] = 0
 		versions = []
-		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "SYNC" in sources[source].TAGS}
+		mod.api_data = {source: sources[source].getAPI(ctx, mod.slug) for source in sources if "DOWNGRADE" in sources[source].TAGS}
 		mod.api_data = {source: mod.api_data[source] for source in mod.api_data if mod.api_data[source] != 500}
 		if not mod.api_data:
 			raise TargetNotFoundError(mod.slug)
@@ -390,10 +391,10 @@ class InvalidChoice(Exception):
 		super().__init__(self.message)
 
 class sourceagnostic: # a fake source that looks up other sources
-	TAGS = []
+	TAGS = ["SYNC"]
 	@staticmethod
 	def getAPI(ctx, slug):
-		apiData = {source: sources[source].getAPI(ctx, slug) for source in sources if "SYNC" in sources[source].TAGS}
+		apiData = {source: sources[source].getAPI(ctx, slug) for source in sources if "SYNC" in sources[source].TAGS and source != "sourceagnostic"}
 		toremove = [source for source in apiData if not isinstance(apiData[source], dict)]
 		for source in toremove:
 			del apiData[source]

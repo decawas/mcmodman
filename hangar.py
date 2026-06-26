@@ -2,11 +2,12 @@
 hangar api functions
 """
 from hashlib import sha256
-import logging, os
+import os
+import logger as logging
 import pycurl, certifi, json
 import cache
 
-TAGS = ["SEARCH", "SYNC"]
+TAGS = ["SEARCH", "SYNC", "DOWNGRADE"]
 BANG = "hangar"
 DB = "hangar.db"
 
@@ -14,7 +15,7 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"]):
 		print(f"Using cached version for plugin '{slug}'")
 		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])
-		
+
 	else:
 		with open(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), "wb") as f:
 			response = pycurl.Curl()
@@ -133,6 +134,6 @@ def projectGetType(apiData):
 class ChecksumError(Exception):
 	"error: a mod failed the checksum"
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 

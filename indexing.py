@@ -1,10 +1,11 @@
 """
 handles indexing for content
 """
-import logging, os, time
-from configobj import ConfigObj # type: ignore
+import os, time
+import logger as logging
+from configobj import ConfigObj
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 INDEX_VERSION = 5
 
@@ -42,15 +43,11 @@ def packwiz(ctx, slug, mod_data):
 	import tomlkit
 	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index"))):
 		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index")))
-	index = {"filename": mod_data['versions'][0]['files'][0]['filename'], "name": mod_data["title"]}
+	index = {"filename": mod_data['versions'][0]['files'][0]['filename'], "name": mod_data["name"]}
 	index["download"] = {"hash": mod_data['versions'][0]["files"][0]["hashes"]["sha512"], "hash-format": "sha512", "mode": "url", "url": mod_data['versions'][0]["files"][0]["url"]}
 	index["update"] = {"modrinth": {"mod-id": mod_data["id"] ,"version": mod_data["id"]}}
 
-	index["side"] = "both"
-	if mod_data["client_side"] == "unsupported":
-		index["side"] = "server"
-	elif mod_data["server_side"] == "unsupported":
-		index["side"] = "client"
+	index["side"] = "client"
 	index = tomlkit.dumps(index)[:-1]
 	with open(os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index", f"{slug}.pw.toml"), 'w',  encoding='utf-8') as file:
 		logger.debug("index %s for mod '%s' written to %s", index, slug, os.path.join(ctx.instanceDir, ctx.instance["modfolder"], ".index", f"{slug}.pw.toml"))

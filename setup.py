@@ -15,7 +15,7 @@ base = 'console'
 executables = [Executable('mcmodman.py', base=base,)]
 
 setup(name='mcmodman',
-      version = '25.22',
+      version = '26.26',
       description = 'yet another minecraft mod manager',
       options = {'build_exe': build_options},
       executables = executables)
