@@ -58,7 +58,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 		versionf["date"] = version["createdAt"]
 		if ctx.instance["loader"] == "paper" or (ctx.instance["loader"] in ["folia", "purpur"] and ctx.config["allow-upstream"]) or (ctx.instance["loader"] == "folia" and "SUPPORTS_FOLIA" in version["settings"]["tags"]):
 			matchesbychannel[version["channel"]["name"].lower()].append(versionf)
-		elif ctx.instance.get("translation-layer", None) == "cardboard":
+		elif ctx.instanceDB.execute("SELECT * FROM mods WHERE slug=?", ("cardboard",)).fetchone() is not None:
 			matchesbychannel["translation"].append(versionf)
 
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("snapshot") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")

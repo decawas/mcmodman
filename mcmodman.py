@@ -3,7 +3,8 @@ main logic, and functions with front-end functionality
 """
 import logger as logging
 import os, commons, cache, indexing, instance
-from typing import List, Protocol
+from typing import Protocol
+sqlite3 = commons.sqlite3
 ctx = commons.ctx
 
 logger = logging.getLogger()
@@ -30,6 +31,7 @@ class ModType():
 		self.index: dict = indexing.get(ctx, self.slug, "explicit" if ctx.args["asexplicit"] else "dependency" if ctx.args["asdeps"] else reason)
 		if self.index is None:
 			raise TargetNotFoundError(slug)
+		self.index["files"] = [file.replace("$INSTANCEDIR", ctx.instanceDir) for file in self.index["files"].split(" ") if file != ""]
 		if self.index.get("source") is not None:
 			self.source = self.index["source"]
 		if self.source is None:
@@ -39,46 +41,28 @@ class ModType():
 		return self.slug in ctx.config["ignored-mods"]
 
 	def isDisabled(self) -> bool | None: # returns true if disabled, false if enabled and none if not installed
-		if self.index["index-version"] <= 4:
-			return True if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}.disabled")) else False if os.path.exists(os.path.join(self.index["folder"], f"{self.index['filename']}")) else None
-		else:
-			if not self.index['files']:
-				return False
-			return True if os.path.exists(f"{self.index['files'][0]}.disabled") else False if os.path.exists(self.index['files'][0]) else None
+		return None if not self.isInstalled() else False if not self.index["files"] or os.path.exists(self.index['files'][0]) else True if os.path.exists(f"{self.index['files'][0]}.disabled") else None
 
 	def isInstalled(self) -> bool:
 		return self.index["version"] != "None"
 
 	def getPath(self) -> list:
-		if self.index["index-version"] <= 4:
-			return os.path.join(ctx.instanceDir, os.path.basename(self.index["folder"]), self.index["filename"])
-		else:
-			return self.index["files"]
+		return self.index["files"]
 
 	def toggle(self):
 		if self.index["version"] == "None": # if not installed, raise target not found
 			raise TargetNotFoundError(self.slug)
-		if self.index["index-version"] <= 4:
-			if self.isDisabled():
-				currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}")
-			else:
-				currentpath, newpath = os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}"), os.path.join(ctx.instanceDir, ctx.instance["modfolder"], f"{self.index['filename']}.disabled")
-			logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
-			print(f"Mod '{self.slug}' has been {'enabled' if self.isDisabled() else 'disabled'}")
-			os.rename(currentpath, newpath)
+		if self.isDisabled():
+			for file in self.index["files"]:
+				currentpath, newpath = f"{file}.disabled", file
+				os.rename(currentpath, newpath)
+				logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 		else:
 			for file in self.index["files"]:
-				if self.isDisabled():
-					currentpath, newpath = f"{file}.disabled", file
-				else:
-					currentpath, newpath = file, f"{file}.disabled"
-				logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
+				currentpath, newpath = file, f"{file}.disabled"
 				os.rename(currentpath, newpath)
+				logger.info("Moved content '%s' from %s to %s", self.slug, os.path.basename(currentpath), os.path.basename(newpath))
 			print(f"Mod '{self.slug}' has been {'disabled' if self.isDisabled() else 'enabled'}")
-
-	@staticmethod
-	def modInstalled(slug):
-		return True if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.ini")) or os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{slug}.mm.toml")) else False
 
 def addMod(ctx):
 	slugs = [] + ctx.args["slugs"]
@@ -87,8 +71,10 @@ def addMod(ctx):
 	if not slugs:
 		raise NoTargetsError
 	slugs = list(set(slugs))
-	ctx.mods: List[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]]
-	ctx.mods: List[ModType] = [mod for mod in ctx.mods if mod.source in sources]
+	global sources
+	sources = {source: sources[source] for source in sources if "SYNC" in sources[source].TAGS}
+	ctx.mods: list[ModType] = [ModType(slug) for slug in slugs if slug not in ctx.config["ignored-mods"]] 
+	ctx.mods: list[ModType] = [mod for mod in ctx.mods if mod.source in sources]
 
 	i, toremove, checked = -1, [], []
 	for mod in ctx.mods:
@@ -142,7 +128,7 @@ def addMod(ctx):
 			reason = 'optional' if dependency['dependency_type'] == 'optional' else 'dependency'
 			progress.write(f"mod '{mod.slug}' is dependent on '{dep_api_data['slug']}'", end="")
 			progress.write(f" ({'required' if reason == 'dependency' else reason})", end="")
-			progress.write(f" [installed]\n" if ModType.modInstalled(dep_api_data['slug']) else "\n", end="")
+			progress.write(" [installed]\n" if ctx.instanceDB.execute("SELECT * FROM mods WHERE slug=?", (dep_api_data["slug"],)).fetchone() is not None else "\n", end="")
 			checked.extend([dependency["project_id"], dep_api_data["slug"]])
 			dep = ModType(dep_api_data["slug"], reason)
 			dep.api_data = dep_api_data
@@ -181,27 +167,17 @@ def removeMod(ctx, slugs=None):
 
 	removeFinal(ctx, ctx.mods)
 
-def removeFinal(ctx, mods, suppressTranslation=False):
+def removeFinal(ctx, mods):
 	for mod in mods:
-		if not suppressTranslation and mod.slug in ("cardboard", "connector"):
-			ctx.instance["translation-layer"] = "None"
-			ctx.instance.write()
-		if mod.index["index-version"] <= 4:
-			if os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"])):
-				os.remove(os.path.join(mod.index["folder"], mod.index["filename"]))
-			elif os.path.exists(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled")):
-				os.remove(os.path.join(mod.index["folder"], mod.index["filename"] + ".disabled"))
-		else:
-			for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
-				os.remove(file)
-		if mod.isInstalled():
-			if os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini")):
-				os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.ini"))
-			elif os.path.exists(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml")):
-				os.remove(os.path.join(ctx.instanceDir, ".content", f"{mod.slug}.mm.toml"))
+		if not mod.isInstalled():
+			continue
 
-			if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
-				os.remove(os.path.join( ctx.instanceDir,"mods", ".index", f"{mod.slug}.pw.toml"))
+		for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
+			os.remove(file)
+		ctx.instanceDB.execute("DELETE FROM mods WHERE slug=?", (mod.slug,))
+		ctx.instanceDB.commit()
+		if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
+			os.remove(os.path.join( ctx.instanceDir,"mods", ".index", f"{mod.slug}.pw.toml"))
 		logger.info("Removed content '%s'", mod.slug)
 		print(f"Removed mod '{mod.slug}'\n" if ctx.args["operation"] == "remove" else "", end='')
 
@@ -212,17 +188,13 @@ def confirm(ctx):
 	for mod in ctx.mods:
 		if "filesize" in mod.index:
 			totaloldsize += mod.index["filesize"]
-		elif mod.index["index-version"] <= 4:
-			if os.path.exists(mod.getPath()):
-				totaloldsize += os.path.getsize(mod.getPath())
-		else:
-			for file in mod.getPath():
-				if os.path.exists(file):
-					totaloldsize += os.path.getsize(file)
-	totalnewsize = sum(mod.api_data["versions"][mod.api_data["selectedversion"]]["files"][0]["size"] for mod in ctx.mods if "files" in mod.api_data["versions"][0]) if op == "download" else sum(mod.index.get("filesize", 0) for mod in ctx.mods)
+		for file in mod.getPath():
+			if os.path.exists(file):
+				totaloldsize += os.path.getsize(file)
+	totalnewsize = sum(mod.api_data["versions"][mod.api_data["selectedversion"]]["files"][0]["size"] for mod in ctx.mods if "files" in mod.api_data["versions"][mod.api_data["selectedversion"]]) if op == "download" else sum(mod.index.get("filesize", 0) for mod in ctx.mods)
 
 	for mod in ctx.mods:
-		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][mod.api_data["selectedversion"]]['version_number'] if op == 'download'  else None}")
+		print(f"Mod {mod.source}/{mod.slug} {mod.index['version']} --> {mod.api_data['versions'][mod.api_data['selectedversion']]['version_number'] if op == 'download'  else None}")
 	print(f"\nTotal {op} size: {convertBytes(totalnewsize if op == 'download' else totaloldsize)}")
 	print(f"Net upgrade Size: {convertBytes(totalnewsize - totaloldsize)}")
 	yn = input(f"\n{ctx.color.INPUT}::{ctx.color.NORMAL} Proceed with download? [Y/n]: ")
@@ -258,9 +230,7 @@ def queryMod(ctx):
 			print("")
 
 def listAll(ctx) -> list:
-	ls = []
-	for file in os.listdir(os.path.join(ctx.instanceDir, ".content")):
-		ls.append(file[:-8] if file.endswith(".mm.toml") else file[:-7])
+	ls = [a[0] for a in ctx.instanceDB.execute("SELECT slug FROM mods").fetchall()]
 	return ls
 
 def toggleMod(ctx):
@@ -284,7 +254,7 @@ def searchMod(ctx):
 	queryData["all"].sort(key=lambda x: x["downloads"])
 	for hit in queryData["all"]:
 		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, ctx.instance["version"], ctx.instance["loader"])
-		print(f"{hit['source']}/{hit['slug']} by {hit['author']} {'[Installed]' if ModType.modInstalled(hit['slug']) else ''}")
+		print(f"{hit['source']}/{hit['slug']} by {hit['author']} {'[Installed]' if ctx.instanceDB.execute('SELECT * FROM mods WHERE slug=?', (hit['slug'],)).fetchone() else ''}")
 		print(f"\t{hit['description'].splitlines()[0]}")
 
 def downgradeMod(ctx):
@@ -344,25 +314,22 @@ def installMod(ctx):
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
 				toignore.append(mod.slug)
-		removeFinal(ctx, [mod], True)
-		if mod.slug in ["connector", "cardboard"]:
-			ctx.instance["translation-layer"] = "sinytra" if mod.slug == "connector" else "cardboard"
-			ctx.instance.write()
-
+		removeFinal(ctx, [mod])
 		if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods"))):
 			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods")))
 		mod.api_data["versions"][mod.api_data["selectedversion"]]["filepaths"] = sources[mod.api_data["versions"][mod.api_data["selectedversion"]].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
-		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][mod.api_data["selectedversion"]]["source"])
 		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][mod.api_data["selectedversion"]]['version_number'], ctx.instance["version"], mod.api_data["versions"][mod.api_data["selectedversion"]]["folder"], mod.api_data["versions"][mod.api_data["selectedversion"]]['files'][0]['filename']) if "folder" in mod.api_data["versions"][mod.api_data["selectedversion"]] else ""
+		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][mod.api_data["selectedversion"]]["source"])
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)
 	progress.close()
 
 	if ctx.args["ignore"]:
-		for slug in toignore:
-			ctx.instance["ignored-mods"] = ctx.instance.get("ignored-mods", []) + [slug]
-		ctx.instance["ignored-mods"] = list(set(ctx.instance["ignored-mods"]))
-		ctx.instance.write()
+		ctx.instance["ignored-mods"].extend(toignore)
+		ctx.instanceDB.execute(
+			"UPDATE metadata SET ignoredhyphenmods=?",
+			(" ".join(ctx.instance["ignored-mods"])))
+		ctx.instanceDB.commit()
 
 def convertBytes(size):
 	for unit in ['B', 'KB', 'MB', 'GB']:
@@ -439,16 +406,17 @@ def cc_wrap(ctx):
 
 if __name__ == "__main__":
 	try:
-		if ctx.lockneeded:
-			if not os.path.exists(os.path.join(ctx.instanceDir, "mcmodman.lock")):
-				fd = os.open(os.path.join(ctx.instanceDir, "mcmodman.lock"), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-				with os.fdopen(fd, 'w', encoding='utf-8') as f:
-					f.write("lock")
-					logger.info("Setting lock")
-			else:
-				print("mcmodman is already running for this instance")
-				logger.info("mcmodman.lock file already exists, exiting")
-				raise LockExistsError("mcmodman is already running for this instance")
+		if ctx.args["operation"] not in ["clear-cache", "instance"] or (ctx.args["operation"] == "instance" and ctx.args["suboperation"] == "export"):
+			if not os.path.exists(os.path.join(ctx.instanceDir, ".mcmodman.db")):
+				instance.instanceFirstrun(ctx)
+			try:
+				ctx.instanceDB = sqlite3.connect(os.path.join(ctx.instanceDir, ".mcmodman.db"))
+			except sqlite3.OperationalError:
+				raise LockExistsError
+			
+			ctx.instance = ctx.instanceDB.execute("""SELECT * FROM metadata""").fetchone()
+			ctx.instance = {k: v for k, v in zip([v[0].replace("hyphen", "-") for v in list(ctx.instanceDB.execute("SELECT name FROM pragma_table_info('metadata');"))], ctx.instance)}
+			ctx.instance["ignored-mods"] = ctx.instance["ignored-mods"].split(" ")
 
 		operations = {"sync": addMod, "upgrade": addMod, "remove": removeMod, "clear-cache": cc_wrap, "query": queryMod, "toggle": toggleMod, "search": searchMod, "downgrade": downgradeMod,
 		"instance": instance.instanceMeta, "version": lambda _: print(commons.__version__)}
@@ -478,7 +446,7 @@ if __name__ == "__main__":
 		logger.critical(e)
 		raise
 	finally:
-		if ctx.lockneeded and os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "mcmodman.lock"))):
+		if hasattr(ctx, "instanceDB"):
 			logger.info("Removing lock")
-			os.remove(os.path.expanduser(os.path.join(ctx.instanceDir, "mcmodman.lock")))
+			ctx.instanceDB.close()
 		logger.info("Exiting")

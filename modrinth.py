@@ -66,7 +66,7 @@ def parseAPI(ctx, apiData: dict) -> list:
 		folder = os.path.join(ctx.instanceDir, "plugins")
 	if "shader" in apiData["project_types"] or "resourcepack" in apiData["project_types"]:
 		if ctx.instance["type"] != "client":
-			print(f"{"shaderpacks" if "shader" in apiData["project_types"] else "resourcepacks"} do not work on servers or worlds, skipping")
+			print(f"{'shaderpacks' if 'shader' in apiData['project_types'] else 'resourcepacks'} do not work on servers or worlds, skipping")
 			logger.warning("content of type '%s' can not be used on servers or worlds", apiData["project_types"][0])
 			return apiData["project_types"][0]
 		mod_loader = apiData["loaders"][0]
@@ -89,10 +89,10 @@ def parseAPI(ctx, apiData: dict) -> list:
 		if ctx.instance["version"] in version["game_versions"] and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams[mod_loader] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = os.path.basename(folder)
 			matchesbychannel[version["version_type"]].append(version)
-		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "cardboard" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["paper"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
+		elif ctx.instance["version"] in version["game_versions"] and ctx.instanceDB.execute("SELECT * FROM mods WHERE slug=?", ("cardboard",)).fetchone() is not None and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["paper"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "plugins"
 			matchesbychannel["translation"].append(version)
-		elif ctx.instance["version"] in version["game_versions"] and ctx.instance.get("translation-layer", None) == "sinytra" and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
+		elif ctx.instance["version"] in version["game_versions"] and ctx.instanceDB.execute("SELECT * FROM mods WHERE slug=?", ("connector",)).fetchone() is not None and (mod_loader in version["loaders"] or (mod_loader in ctx.loaderUpstreams and any(loader in ctx.loaderUpstreams["quilt"] for loader in version["loaders"]) and ctx.config["allow-upstream"])):
 			version["folder"] = "mods"
 			matchesbychannel["translation"].append(version)
 	matches = matchesbychannel.pop("release") + matchesbychannel.pop("beta") + matchesbychannel.pop("alpha") + matchesbychannel.pop("translation")
@@ -142,7 +142,7 @@ def searchAPI(ctx, query: str) -> dict:
 	if "queryData" not in locals():
 		logger.info("Could not find valid cache data for query '%s'", query)
 		print(f"Querying modrinth with query '{query}'")
-		url = f'https://api.modrinth.com/v3/search?limit=48&index=downloads&query={query.replace(' ', '+')}'
+		url = f"https://api.modrinth.com/v3/search?limit=48&index=downloads&query={query.replace(' ', '+')}"
 		buffer = bytearray()
 		response = pycurl.Curl()
 		response.setopt(response.URL, url)

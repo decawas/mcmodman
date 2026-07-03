@@ -2,8 +2,7 @@
 defines common variables, and meta-instance functions
 """
 import logger as logging
-import os, sys, appdirs
-from typing import Any
+import os, sys, appdirs, sqlite3
 from configobj import ConfigObj
 
 __version__ = "v26.26"
@@ -79,11 +78,11 @@ class InvalidOption(Exception):
 class Context():
 	args: dict
 	config: ConfigObj
-	instance: ConfigObj
+	instance: dict
 	instanceDir: str
-	lockneeded: bool
+	instanceDB: sqlite3.Connection
 	loaderUpstreams: dict
-	color: Any
+	color: str
 
 ctx = Context()
 
@@ -168,12 +167,5 @@ if ctx.args["operation"] != "instance" or (ctx.args["operation"] == "instance" a
 		print("selected instance not found")
 		raise SystemExit
 	logger.info("selected instance: %s", ctx.config["selected-instance"])
-
-	if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")):
-		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True, encoding='utf-8')
-	else:
-		from instance import instanceFirstrun
-		ctx.instance = instanceFirstrun(ctx)
-	logger.info("instance %s", ctx.instance)
 
 	ctx.loaderUpstreams = {"quilt": ["fabric"], "neoforge": ["forge"], "folia": ["paper"], "purpur": ["paper","spigot","bukkit"], "paper": ["spigot","bukkit"], "spigot": ["bukkit"]}

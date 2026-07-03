@@ -1,7 +1,7 @@
 """
 Instance management functions for mcmodman
 """
-import os, re
+import os, re, sqlite3
 import logger as logging
 from configobj import ConfigObj
 import cache
@@ -9,10 +9,48 @@ import cache
 logger = logging.getLogger()
 
 def instanceFirstrun(ctx):
-	instance = ConfigObj(unrepr=True, encoding='utf-8')
-	if not any([file in os.listdir(ctx.instanceDir) for file in ["options.txt", "server.properties", "latest.log"]]):
+	if not any([file in os.listdir(ctx.instanceDir) for file in ["options.txt", "server.properties", "level.dat"]]):
 		print("this directory does not appear to be an instance")
 		raise SystemExit
+	ctx.instanceDB = sqlite3.connect(os.path.join(ctx.instanceDir, ".mcmodman.db"))
+	ctx.instanceDB.execute("""CREATE TABLE IF NOT EXISTS
+		mods(slug TEXT PRIMARY KEY, indexhyphenversion INTEGER, files TEXT, modhyphenid TEXT, version TEXT, versionhyphenid TEXT, type TEXT, source TEXT, gamehyphenversion TEXT, loader TEXT, description TEXT, filesize INTEGER, date TEXT, reason TEXT, requires TEXT, requiredhyphenby TEXT)""")
+	ctx.instanceDB.execute("""CREATE TABLE IF NOT EXISTS
+		metadata(type TEXT PRIMARY KEY, modfolder TEXT, loader TEXT, version TEXT, ignoredhyphenmods TEXT, indexhyphencompatibility TEXT)""")
+
+	if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")):
+		import tomlkit
+		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True, encoding='utf-8')
+
+		ctx.instanceDB.execute("""INSERT OR REPLACE INTO metadata VALUES
+			(?, ?, ?, ?, ?, ?)""",
+			(ctx.instance["type"], ctx.instance["modfolder"], ctx.instance["loader"], ctx.instance["version"], " ".join(ctx.instance.get("ignored-mods", [])), ctx.instance["index-compatibility"]))
+		ctx.instanceDB.execute("""INSERT OR REPLACE INTO mods VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+			("minecraft", 6, "", "minecraft", ctx.instance["version"], ctx.instance["version"], ctx.instance["type"], "mojang", ctx.instance["version"], None, None, 0, None, "explicit", "[]", "[]"))
+		for mod in os.listdir(os.path.join(ctx.instanceDir, ".content")):
+			if mod.endswith(".mm.ini"):
+				index = dict(ConfigObj(os.path.join(ctx.instanceDir, ".content", mod), unrepr=True, encoding='utf-8'))
+			elif mod.endswith(".mm.toml"):
+				with open(os.path.join(ctx.instanceDir, ".content", mod), "r", encoding="utf-8") as f:
+					index = tomlkit.load(f)
+			else:
+				continue
+			files = index["files"] if index["index-version"] >= 5 else [os.path.join(index.get("folder"), index["filename"])]
+			for i, file in enumerate(files):
+				if file.startswith("./"):
+					files[i] = f"$INSTANCEDIR{file.removeprefix(".")}"
+				elif file.startswith(ctx.instanceDir):
+					files[i] = f"$INSTANCEDIR{file.removeprefix(ctx.instanceDir)}"
+			ctx.instanceDB.execute("""INSERT OR REPLACE INTO mods VALUES
+				(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+				(index["slug"], 6, " ".join(files), index["mod-id"], index["version"], index["version-id"], index["type"], index["source"], index["game-version"], index.get("loader", None), index["description"], index["filesize"], index["date"], index["reason"], "[]", "[]"))
+		ctx.instanceDB.commit()
+		ctx.instanceDB.close()
+		return
+
+
+	instance = {}
 	if os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, "options.txt"))):
 		instance["type"] = "client"
 		instance["modfolder"] = "mods"
@@ -62,9 +100,14 @@ def instanceFirstrun(ctx):
 		print("instance must be run at least once before using mcmodman")
 
 	instance["index-compatibility"] = compdetect(ctx)
-	
-	instance.filename = os.path.join(ctx.instanceDir, "mcmodman_managed.ini")
-	instance.write()
+	ctx.instanceDB.execute("""INSERT INTO metadata VALUES
+			(?, ?, ?, ?, ?, ?)""",
+			(instance["type"], instance["modfolder"], instance["loader"], instance["version"], "[]", instance["index-compatibility"]))
+	ctx.instanceDB.execute("""INSERT INTO mods VALUES
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+			("minecraft", 6, None, "minecraft", instance["version"], instance["version"], instance["type"], "mojang", instance["version"], None, None, 0, None, "explicit", "[]", "[]"))
+	ctx.instanceDB.commit()
+	ctx.instanceDB.close()
 	return instance
 
 def loaderdetect(ctx, log):
@@ -164,6 +207,6 @@ def instanceMeta(ctx):
 			print(name, "*" if name == ctx.config["selected-instance"] else "")
 		return
 	if ctx.args["suboperation"] == "export":
-		for mod in [file[:-8] if file.endswith(".mm.toml") else file[:-7] for file in os.listdir(os.path.join(ctx.config["instances"][ctx.config["selected-instance"]]["path"], ".content"))]:
+		for mod in [a[0] for a in ctx.instanceDB.execute("SELECT slug FROM mods").fetchall()]:
 			print(mod, end=" ")
 		print("")
