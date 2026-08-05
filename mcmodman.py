@@ -171,9 +171,9 @@ def removeFinal(ctx, mods):
 	for mod in mods:
 		if not mod.isInstalled():
 			continue
-
-		for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
-			os.remove(file)
+		if not ctx.args["dbonly"]:
+			for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
+				os.remove(file)
 		ctx.instanceDB.execute("DELETE FROM mods WHERE slug=?", (mod.slug,))
 		ctx.instanceDB.commit()
 		if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
@@ -284,7 +284,7 @@ def downgradeMod(ctx):
 
 
 		for i, version in enumerate(reversed(mod.api_data["versions"])):
-			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(ctx, mod.slug, ctx.instance["loader"], version['version_number'], ctx.instance["version"]) else ''
+			suffix = "[INSTALLED]" if version['id'] == mod.index['version-id'] else '[CACHED]' if cache.isModCached(ctx, f"{mod.slug}-{ctx.instance["loader"]}-{version['version_number']}-{ctx.instance["version"]}.jar") else ''
 			print(f"  {len(mod.api_data['versions']) - i - 1})\t{version['source']}/{mod.slug}\t{version['version_number']}\t{suffix}")
 
 		choice = input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} Choose version: ")
@@ -314,11 +314,11 @@ def installMod(ctx):
 			ignore =  input(f"{ctx.color.INPUT}::{ctx.color.NORMAL} add {mod.slug} to ignored-mods? [y/N]: ").lower()
 			if ignore == "y":
 				toignore.append(mod.slug)
-		removeFinal(ctx, [mod])
-		if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods"))):
-			os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods")))
+		if not ctx.args["dbonly"]:
+			removeFinal(ctx, [mod])
+			if not os.path.exists(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods"))):
+				os.makedirs(os.path.join(ctx.instanceDir, mod.api_data["versions"][mod.api_data["selectedversion"]].get("folder", "mods")))
 		mod.api_data["versions"][mod.api_data["selectedversion"]]["filepaths"] = sources[mod.api_data["versions"][mod.api_data["selectedversion"]].get("source", "modrinth")].getMod(ctx, mod.slug, mod.api_data, progress)
-		_ = cache.setModCache(ctx, mod.slug, ctx.instance["loader"], mod.api_data["versions"][mod.api_data["selectedversion"]]['version_number'], ctx.instance["version"], mod.api_data["versions"][mod.api_data["selectedversion"]]["folder"], mod.api_data["versions"][mod.api_data["selectedversion"]]['files'][0]['filename']) if "folder" in mod.api_data["versions"][mod.api_data["selectedversion"]] else ""
 		indexing.mcmm(ctx, mod.slug, mod.api_data, mod.index["reason"], mod.api_data["versions"][mod.api_data["selectedversion"]]["source"])
 		progress.write(f"Mod '{mod.slug}' successfully updated")
 		progress.update(1)

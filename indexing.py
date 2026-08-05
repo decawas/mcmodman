@@ -11,9 +11,6 @@ INDEXVERSION = 6
 _indexkeys = None
 
 def mcmm(ctx, slug, mod_data, reason="explicit", source="local"):
-	if not os.path.exists(os.path.expanduser(os.path.join(ctx.instanceDir, ".content"))):
-		os.makedirs(os.path.expanduser(os.path.join(ctx.instanceDir, ".content")))
-
 	loader = ""
 	if source == "modrinth":
 		loader = mod_data['versions'][0]["loaders"][0] if ctx.instance["loader"] not in mod_data['versions'][0]["loaders"] else ctx.instance["loader"]
@@ -51,7 +48,7 @@ def get(ctx, slug, reason="explicit") -> dict:
 		indexfromdb = {k: v for k, v in zip(_indexkeys, indexfromdb)}
 		return indexfromdb
 	elif ctx.args["operation"] in ["sync", "downgrade"]:
-		index = {"index-version": 2147483647, "slug": slug, "files": [], "version": "None", "version-id": "None", "reason": reason, "size": 0}
+		index = {"index-version": 2147483647, "slug": slug, "files": "", "version": "None", "version-id": "None", "reason": reason, "size": 0}
 		logger.info("Created dummy index for new mod '%s'", slug)
 		return index
 	return None

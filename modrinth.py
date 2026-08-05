@@ -12,8 +12,10 @@ BANG = "modrinth"
 DB = "modrinth.db"
 
 def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
-	if cache.isModCached(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"]):
-		cache.getModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])
+	if ctx.args["dbonly"]:
+		pass
+	elif cache.isModCached(ctx, f"{slug}-{ctx.instance['loader']}-{modData['versions'][modData['selectedversion']]['version_number']}-{ctx.instance['version']}.jar"):
+		cache.getModCache(ctx, f"{slug}-{ctx.instance['loader']}-{modData['versions'][modData['selectedversion']]['version_number']}-{ctx.instance['version']}.jar", os.path.join(modData["versions"][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']))
 	else:
 		with open(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), "wb") as f:
 			response = pycurl.Curl()
@@ -41,7 +43,7 @@ def getMod(ctx, slug: str, modData: dict, progress=None) -> list:
 				os.remove(os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData["versions"][modData["selectedversion"]]['files'][0]['filename']))
 				raise ChecksumError
 
-		cache.setModCache(ctx, slug, ctx.instance["loader"], modData['versions'][modData["selectedversion"]]['version_number'], ctx.instance["version"], modData["versions"][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])
+		cache.setModCache(ctx, os.path.join(modData["versions"][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename']), f"{slug}-{ctx.instance['loader']}-{modData['versions'][modData['selectedversion']]['version_number']}-{ctx.instance['version']}.jar")
 	return [os.path.join(ctx.instanceDir, modData['versions'][modData["selectedversion"]]["folder"], modData['versions'][modData["selectedversion"]]['files'][0]['filename'])]
 
 def parseAPI(ctx, apiData: dict) -> list:
@@ -126,8 +128,7 @@ def getAPI(ctx, slug: str) -> dict:
 			modData["versions"] = json.loads(buffer.decode("utf-8"))
 			response.close()
 
-			cache.setAPICache(ctx, "modrinth.db", modData['id'], modData)
-			cache.setAPICache(ctx, "modrinth.db", modData['slug'], modData)
+			cache.setAPICache(ctx, "modrinth.db", modData['id'], modData['slug'], modData)
 		except pycurl.error:
 			modData = {"versions": []}
 	

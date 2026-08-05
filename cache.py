@@ -2,31 +2,41 @@
 cache related functions
 """
 
-from shutil import copyfile
 import logger as logging
 from time import time
 import os, sqlite3, json
+_copyfile = None
 
-APICACHEVERSION = 5
+APICACHEVERSION = 6
 _preserve = {}
 
 logger = logging.getLogger()
 
 def isAPICached(ctx, db: str, slug: str) -> bool:
 	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
+	if slug in _preserve and _preserve[slug] == False:
+		return False
 	try:
-		cacheData = db.execute("SELECT * FROM cache WHERE slug=?", (slug,)).fetchone()
-	except sqlite3.OperationalError:
+		cacheData = db.execute("SELECT * FROM cachev6 WHERE slug=?", (slug,)).fetchone()
+		if cacheData is None:
+			cacheData = db.execute("SELECT * FROM cachev6 WHERE id=?", (slug,)).fetchone()
+		if cacheData is None:
+			db.close()
+			return False
+	except sqlite3.OperationalError as e:
+		logger.warning(e)
 		return False
-	if cacheData is None:
-		db.close()
-		return False
-	_preserve[slug] = json.loads(cacheData[3])
+	valid = time() - cacheData[3] <= ctx.config["api-expire"] and cacheData[2] == APICACHEVERSION
+	_preserve[cacheData[0]] = json.loads(cacheData[4]) if valid else False
+	_preserve[cacheData[1]] = _preserve[cacheData[0]]
 	db.close()
-	return time() - cacheData[2] <= ctx.config["api-expire"] and cacheData[1] == APICACHEVERSION
+	return valid
 	
-def isModCached(ctx, slug: str, loader: str, mod_version: str, game_version: str) -> bool:
-	return os.path.exists(os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
+def isModCached(ctx, filename: str) -> bool:
+	global _copyfile
+	if _copyfile is None:
+		from shutil import copyfile as _copyfile
+	return os.path.exists(os.path.join(ctx.config["cache-dir"], "mods", filename))
 
 def getAPICache(ctx, db: str, slug: str) -> dict:
 	if not isAPICached(ctx, db, slug):
@@ -35,29 +45,29 @@ def getAPICache(ctx, db: str, slug: str) -> dict:
 		cacheData = _preserve[slug]
 	else:
 		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
-		cacheData = json.loads(db.execute("SELECT * FROM cache WHERE slug=?", (slug,)).fetchone()[3])
+		cacheData = json.loads(db.execute("SELECT * FROM cachev6 WHERE slug=?", (slug,)).fetchone()[3])
 		db.close()
 	return cacheData
 
-def getModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str) -> bool:
-	if not isModCached(ctx, slug, loader, mod_version, game_version):
+def getModCache(ctx, path: str, dest: str) -> bool:
+	if not isModCached(ctx, path):
 		return False
-	copyfile(os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"), os.path.join(ctx.instanceDir, folder, filename))
+	_copyfile(os.path.join(ctx.config["cache-dir"], "mods", path), os.path.join(ctx.instanceDir, dest))
 	return True
 
-def setAPICache(ctx, db: str, slug: str, apiData: dict):
+def setAPICache(ctx, db: str, id: str, slug: str, apiData: dict):
 	db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], db))
 	db.execute("""CREATE TABLE IF NOT EXISTS
-		cache(slug TEXT PRIMARY KEY, apicacheversion INTEGER, time FLOAT, data TEXT)""")
-	db.execute("""INSERT OR REPLACE INTO cache VALUES
-		(?, ?, ?, ?)""", (slug, APICACHEVERSION, time(), json.dumps(apiData)))
+		cachev6(id TEXT PRIMARY KEY, slug TEXT, apicacheversion INTEGER, time FLOAT, data TEXT)""")
+	db.execute("""INSERT OR REPLACE INTO cachev6 VALUES
+		(?, ?, ?, ?, ?)""", (id, slug, APICACHEVERSION, time(), json.dumps(apiData)))
 	db.commit()
 	db.close()
 
-def setModCache(ctx, slug: str, loader: str, mod_version: str, game_version: str, folder: str, filename: str):
-	if isModCached(ctx, slug, loader, mod_version, game_version):
+def setModCache(ctx, path: str, dest: str):
+	if isModCached(ctx, dest):
 		return
-	copyfile(os.path.join(ctx.instanceDir, folder, filename), os.path.join(ctx.config["cache-dir"], "mods", f"{slug}-{loader}-{mod_version}-{game_version}.jar"))
+	_copyfile(os.path.join(ctx.instanceDir, path), os.path.join(ctx.config["cache-dir"], "mods", dest))
 
 def clearCache(ctx, sources):
 	if ctx.args["suboperation"] in ["content", "all"]:
@@ -67,7 +77,7 @@ def clearCache(ctx, sources):
 		return
 	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
 		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
-		db.execute("DELETE FROM cache WHERE time < ?", (time() - 3600,))
+		db.execute("DELETE FROM cachev6 WHERE time < ?", (time() - 3600,))
 		db.commit()
 		db.close()
 		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))
@@ -83,7 +93,7 @@ def clearAPICache(ctx, sources):
 			return
 	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
 		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
-		db.execute("DELETE FROM cache")
+		db.execute("DELETE FROM cachev6")
 		db.commit()
 		db.close()
 		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))

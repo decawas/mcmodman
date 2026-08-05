@@ -9,69 +9,6 @@ __version__ = "v26.26"
 logger = logging.getLogger()
 logger.info("Starting mcmodman version %s", __version__)
 
-def parse_args():
-	for arg in sys.argv:
-		if "mcmodman" in arg:
-			args = sys.argv[sys.argv.index(arg) + 1:]
-			break
-
-	shortflags = "".join([arg.replace("-", "") for arg in args if arg.startswith("-") and not arg.startswith("--")])
-	longflags = [arg.replace("--", "") for arg in args if arg.startswith("--")]
-	slugs = [arg for arg  in args if not arg.startswith("-")]
-
-	ops = [flag for flag in longflags if flag in ["sync", "upgrade", "downgrade", "remove", "toggle", "query", "search", "cc", "instance", "version"]]
-	ops.extend([flag for flag in shortflags if flag in ["S", "U", "D", "R", "T", "Q", "F"]])
-	if len(ops) > 1:
-		print("error: only use one operation at a time")
-		logger.error("user used multiple operations: %s", ops)
-		raise SystemExit
-	if not ops:
-		print("error: no operation specified")
-		logger.error("user did not specify an operation")
-		raise SystemExit
-	
-	if "asdeps" in longflags and "asexplicit" in longflags: raise SystemExit
-	
-	if ops[0] in ["instance", "version"] and slugs:
-		print(f"error: this operation takes 0 arguments, {len(slugs)} given")
-		logger.error("user gave too many arguments")
-		raise SystemExit
-
-	args = {}
-	if ops[0] in ["S", "sync"]: args["operation"] = "sync"
-	elif ops[0] in ["U", "upgrade"]: args["operation"] = "upgrade"
-	elif ops[0] in ["D", "downgrade"]: args["operation"] = "downgrade"
-	elif ops[0] in ["R", "remove"]: args["operation"] = "remove"
-	elif ops[0] in ["F", "search"]: args["operation"] = "search"
-	elif ops[0] in ["Q", "query"]: args["operation"] = "query"
-	elif ops[0] in ["T", "toggle"]: args["operation"] = "toggle"
-	elif ops[0] in ["instance", "version"]: args["operation"] = ops[0]
-	elif ops[0] in ["cc"]: args["operation"] = "clear-cache"
-
-	args["asexplicit"] = "asexplicit" in longflags
-	args["asdeps"] = "asdeps" in longflags
-
-	if args["operation"] == "search":
-		args["query"] = " ".join(slugs)
-	elif args["operation"] == "clear-cache":
-		args["suboperation"] = "" if not slugs else slugs[0]
-	elif args["operation"] == "instance":
-		args["suboperation"] = slugs[0]
-		args["name"] = slugs[1] if len(slugs) > 1 else None
-		args["path"] = slugs[2] if len(slugs) > 2 else None
-	else:
-		args["slugs"] = slugs
-
-	args["all"] = "a" in shortflags or "all" in longflags
-	args["explicit"] = "e" in shortflags or "explicit" in longflags
-	args["dependency"] = "d" in shortflags or "dependency" in longflags
-	args["optional"] = "p" in shortflags or "optional" in longflags
-	args["noconfirm"] = "y" in shortflags or "noconfirm" in longflags
-	args["color"] = "c" in shortflags or "color" in longflags
-	args["info"] = "i" in shortflags or "info" in longflags
-	args["ignore"] = "ignore" in longflags
-	return args
-
 class InvalidOption(Exception):
 	"error: invalid option"
 
@@ -123,15 +60,6 @@ logger.basicConfig(filename=ctx.config["log-file"], level=logging.NOTSET)
 logger.debug("Config directory: %s", config_dir)
 logger.debug(ctx.config)
 
-try:
-	ctx.args = parse_args()
-	ctx.lockneeded = ctx.args["operation"] in ["sync", "upgrade", "remove", "toggle", "downgrade"]
-	logger.debug("Arguments: %s", ctx.args)
-except Exception as e:
-	print("error: invalid option")
-	logger.critical("invalid option")
-	raise
-
 if "instances" not in ctx.config:
 	ctx.config["instances"]  = {}
 	ctx.instanceDir = ctx.config.get("instances-file", os.path.join(config_dir, "instances.ini"))
@@ -153,6 +81,70 @@ logger.info("Cache directory: %s", ctx.config["cache-dir"])
 if not os.path.exists(ctx.config["cache-dir"]):
 	os.makedirs(ctx.config["cache-dir"])
 	os.makedirs(os.path.join(ctx.config["cache-dir"], "mods"))
+
+for arg in sys.argv:
+	if "mcmodman" in arg:
+		ctx.args = sys.argv[sys.argv.index(arg) + 1:]
+		break
+
+shortflags = "".join([arg.replace("-", "") for arg in ctx.args if arg.startswith("-") and not arg.startswith("--")])
+longflags = [arg.replace("--", "") for arg in ctx.args if arg.startswith("--")]
+slugs = [arg for arg  in ctx.args if not arg.startswith("-")]
+
+ops = [flag for flag in longflags if flag in ["sync", "upgrade", "downgrade", "remove", "toggle", "query", "search", "cc", "instance", "version"]]
+ops.extend([flag for flag in shortflags if flag in ["S", "U", "D", "R", "T", "Q", "F"]])
+if len(ops) > 1:
+	print("error: only use one operation at a time")
+	logger.error("user used multiple operations: %s", ops)
+	raise SystemExit
+if not ops:
+	print("error: no operation specified")
+	logger.error("user did not specify an operation")
+	raise SystemExit
+
+if "asdeps" in longflags and "asexplicit" in longflags: raise SystemExit
+
+if ops[0] in ["instance", "version"] and slugs:
+	print(f"error: this operation takes 0 arguments, {len(slugs)} given")
+	logger.error("user gave too many arguments")
+	raise SystemExit
+
+ctx.args = {}
+if ops[0] in ["S", "sync"]: ctx.args["operation"] = "sync"
+elif ops[0] in ["U", "upgrade"]: ctx.args["operation"] = "upgrade"
+elif ops[0] in ["D", "downgrade"]: ctx.args["operation"] = "downgrade"
+elif ops[0] in ["R", "remove"]: ctx.args["operation"] = "remove"
+elif ops[0] in ["F", "search"]: ctx.args["operation"] = "search"
+elif ops[0] in ["Q", "query"]: ctx.args["operation"] = "query"
+elif ops[0] in ["T", "toggle"]: ctx.args["operation"] = "toggle"
+elif ops[0] in ["instance", "version"]: ctx.args["operation"] = ops[0]
+elif ops[0] in ["cc"]: ctx.args["operation"] = "clear-cache"
+
+ctx.args["asexplicit"] = "asexplicit" in longflags
+ctx.args["asdeps"] = "asdeps" in longflags
+
+if ctx.args["operation"] == "search":
+	ctx.args["query"] = " ".join(slugs)
+elif ctx.args["operation"] == "clear-cache":
+	ctx.args["suboperation"] = "" if not slugs else slugs[0]
+elif ctx.args["operation"] == "instance":
+	ctx.args["suboperation"] = slugs[0]
+	ctx.args["name"] = slugs[1] if len(slugs) > 1 else None
+	ctx.args["path"] = slugs[2] if len(slugs) > 2 else None
+else:
+	ctx.args["slugs"] = slugs
+
+ctx.args["all"] = "a" in shortflags or "all" in longflags
+ctx.args["explicit"] = "e" in shortflags or "explicit" in longflags
+ctx.args["dependency"] = "d" in shortflags or "dependency" in longflags
+ctx.args["optional"] = "p" in shortflags or "optional" in longflags
+ctx.args["noconfirm"] = "noconfirm" in longflags
+ctx.args["color"] = "c" in shortflags or "color" in longflags
+ctx.args["info"] = "i" in shortflags or "info" in longflags
+ctx.args["ignore"] = "ignore" in longflags
+ctx.args["dbonly"] = "dbonly" in longflags
+ctx.lockneeded = ctx.args["operation"] in ["sync", "upgrade", "remove", "toggle", "downgrade"]
+logger.debug("Arguments: %s", ctx.args)
 
 class color():
 	NORMAL = "\033[0m"
