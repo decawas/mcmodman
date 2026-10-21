@@ -116,8 +116,8 @@ def getAPI(ctx, slug: str) -> dict:
 			response = pycurl.Curl()
 			response.setopt(response.URL, f"https://api.modrinth.com/v3/project/{slug}")
 			response.setopt(response.CAINFO, certifi.where())
-			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
-			response.setopt(response.USERAGENT, "mcmodman (https://github.com/decawas/mcmodman)")
+			response.setopt(response.WRITEFUNCTION, buffer.extend)
+			response.setopt(response.USERAGENT, "mcmodman (https://codeberg.org/ekno/mcmodman)")
 			response.perform()
 			if buffer == b"":
 				return 500
@@ -148,7 +148,7 @@ def searchAPI(ctx, query: str) -> dict:
 		response = pycurl.Curl()
 		response.setopt(response.URL, url)
 		response.setopt(response.CAINFO, certifi.where())
-		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.setopt(response.WRITEFUNCTION, buffer.extend)
 		response.setopt(response.USERAGENT, "mcmodman (https://codeberg.org/ekno/mcmodman)")
 		response.perform()
 		queryData = json.loads(buffer.decode("utf-8"))

@@ -3,7 +3,6 @@ handles indexing for content
 """
 import os, time
 import logger as logging
-from configobj import ConfigObj
 
 logger = logging.getLogger()
 

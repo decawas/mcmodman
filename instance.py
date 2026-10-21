@@ -3,7 +3,6 @@ Instance management functions for mcmodman
 """
 import os, re, sqlite3
 import logger as logging
-from configobj import ConfigObj
 import cache
 
 logger = logging.getLogger()
@@ -20,6 +19,7 @@ def instanceFirstrun(ctx):
 
 	if os.path.exists(os.path.join(ctx.instanceDir, "mcmodman_managed.ini")):
 		import tomlkit
+		from configobj import ConfigObj
 		ctx.instance = ConfigObj(os.path.join(ctx.instanceDir, "mcmodman_managed.ini"), unrepr=True, encoding='utf-8')
 
 		ctx.instanceDB.execute("""INSERT OR REPLACE INTO metadata VALUES
@@ -77,7 +77,7 @@ def instanceFirstrun(ctx):
 			response = pycurl.Curl()
 			response.setopt(response.URL, "https://raw.githubusercontent.com/PrismarineJS/minecraft-data/refs/heads/master/data/pc/common/protocolVersions.json")
 			response.setopt(response.CAINFO, certifi.where())
-			response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+			response.setopt(response.WRITEFUNCTION, buffer.extend)
 			response.perform()
 			versionData = json.loads(buffer.decode("utf-8"))
 			response.close()

@@ -5,7 +5,7 @@ import logger as logging
 import os, sys, appdirs, sqlite3
 from configobj import ConfigObj
 
-__version__ = "v26.26"
+__version__ = "v26.43"
 logger = logging.getLogger()
 logger.info("Starting mcmodman version %s", __version__)
 

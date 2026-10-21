@@ -3,7 +3,6 @@ main logic, and functions with front-end functionality
 """
 import logger as logging
 import os, commons, cache, indexing, instance
-from typing import Protocol
 sqlite3 = commons.sqlite3
 ctx = commons.ctx
 
@@ -174,8 +173,9 @@ def removeFinal(ctx, mods):
 		if not ctx.args["dbonly"]:
 			for file in [file for file in mod.getPath() if os.path.exists(file)] if not mod.isDisabled() else [f"{file}.disabled" for file in mod.getPath() if os.path.exists(f"{file}.disabled")]:
 				os.remove(file)
-		ctx.instanceDB.execute("DELETE FROM mods WHERE slug=?", (mod.slug,))
-		ctx.instanceDB.commit()
+		if ctx.args["operation"] == "remove":
+			ctx.instanceDB.execute("DELETE FROM mods WHERE slug=?", (mod.slug,))
+			ctx.instanceDB.commit()
 		if os.path.exists(os.path.join(ctx.instanceDir, "mods", ".index", f"{mod.slug}.pw.toml")) and "index-compatibility" in ctx.instance:
 			os.remove(os.path.join( ctx.instanceDir,"mods", ".index", f"{mod.slug}.pw.toml"))
 		logger.info("Removed content '%s'", mod.slug)
@@ -249,8 +249,7 @@ def searchMod(ctx):
 		print(f"No results found for query '{query}'")
 		logger.info("No results found for query '%s'", query)
 		return
-	queryData["all"] = queryData["modrinth"]["hits"]
-	queryData["all"].extend(queryData["hangar"]["hits"])
+	queryData["all"] = [source["hits"] for source in queryData if source != "all"]
 	queryData["all"].sort(key=lambda x: x["downloads"])
 	for hit in queryData["all"]:
 		logger.info("Got hit '%s' for query '%s' with facets: [[\"project_types!=modpack\"],[\"versions:%s\"],[\"categories:%s\"]]", hit['slug'], query, ctx.instance["version"], ctx.instance["loader"])
@@ -384,7 +383,7 @@ class sourceagnostic: # a fake source that looks up other sources
 				return apiData[s]
 		return None
 
-class SourceAbstract(Protocol):
+class SourceAbstract():
 	TAGS: list
 	BANG: str
 	@staticmethod

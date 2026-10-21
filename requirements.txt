@@ -1,5 +1,6 @@
 appdirs>=1.4.4
-pycurl>=7.45.6
+pycurl>=7.48.0
+certifi>=2026.10.19
 pyyaml>=6.0.2
 tomlkit>=0.13.2
 configobj>=5.0.9

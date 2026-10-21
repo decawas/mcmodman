@@ -81,14 +81,13 @@ def getAPI(ctx, slug: str) -> dict:
 		response = pycurl.Curl()
 		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}")
 		response.setopt(response.CAINFO, certifi.where())
-		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.setopt(response.WRITEFUNCTION, buffer.extend)
 		response.perform()
 		modData = json.loads(buffer.decode("utf-8"))
 		if modData.get("httpError") != None:
 			return 404
 		buffer = bytearray()
 		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25")
-		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
 		response.perform()
 		modData["versions"] = json.loads(buffer.decode("utf-8"))["result"]
 		response.close()
@@ -111,7 +110,7 @@ def searchAPI(ctx, query: str) -> dict:
 		response = pycurl.Curl()
 		response.setopt(response.URL, url)
 		response.setopt(response.CAINFO, certifi.where())
-		response.setopt(response.WRITEFUNCTION, lambda d: buffer.extend(d))
+		response.setopt(response.WRITEFUNCTION, buffer.extend)
 		response.perform()
 		queryData = json.loads(buffer.decode("utf-8"))
 		response.close()
