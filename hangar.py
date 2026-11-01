@@ -86,7 +86,7 @@ def getAPI(ctx, slug: str) -> dict:
 		modData = json.loads(buffer.decode("utf-8"))
 		if modData.get("httpError") != None:
 			return 404
-		buffer = bytearray()
+		buffer.clear()
 		response.setopt(response.URL, f"https://hangar.papermc.io/api/v1/projects/{slug}/versions?limit=25")
 		response.perform()
 		modData["versions"] = json.loads(buffer.decode("utf-8"))["result"]

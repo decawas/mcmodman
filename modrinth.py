@@ -122,7 +122,9 @@ def getAPI(ctx, slug: str) -> dict:
 			if buffer == b"":
 				return 500
 			modData = json.loads(buffer.decode("utf-8"))
-			buffer = bytearray()
+			if "error" in modData:
+				return 500
+			buffer.clear()
 			response.setopt(response.URL, f"https://api.modrinth.com/v3/project/{slug}/version")
 			response.perform()
 			modData["versions"] = json.loads(buffer.decode("utf-8"))

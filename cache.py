@@ -76,9 +76,12 @@ def clearCache(ctx, sources):
 		clearAPICache(ctx, sources)
 		return
 	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
+		if not os.path.exists(os.path.join(ctx.config["cache-dir"], source.DB)):
+			continue
 		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
-		db.execute("DELETE FROM cachev6 WHERE time < ?", (time() - 3600,))
-		db.commit()
+		if db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cachev6'").fetchone():
+			db.execute("DELETE FROM cachev6 WHERE time < ?", (time() - 3600,))
+			db.commit()
 		db.close()
 		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))
 	
@@ -92,9 +95,12 @@ def clearAPICache(ctx, sources):
 		if yn.lower() != 'y' and yn != '':
 			return
 	for source in [sources[source] for source in sources if hasattr(sources[source], "DB")]:
+		if not os.path.exists(os.path.join(ctx.config["cache-dir"], source.DB)):
+			continue
 		db = sqlite3.connect(os.path.join(ctx.config["cache-dir"], source.DB))
-		db.execute("DELETE FROM cachev6")
-		db.commit()
+		if db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cachev6'").fetchone():
+			db.execute("DELETE FROM cachev6")
+			db.commit()
 		db.close()
 		logger.info("cache cleared from %s", os.path.join(ctx.config["cache-dir"], source.DB))
 	print("Done Clearing Cache")

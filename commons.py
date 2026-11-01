@@ -86,10 +86,13 @@ for arg in sys.argv:
 	if "mcmodman" in arg:
 		ctx.args = sys.argv[sys.argv.index(arg) + 1:]
 		break
-
-shortflags = "".join([arg.replace("-", "") for arg in ctx.args if arg.startswith("-") and not arg.startswith("--")])
-longflags = [arg.replace("--", "") for arg in ctx.args if arg.startswith("--")]
-slugs = [arg for arg  in ctx.args if not arg.startswith("-")]
+shortflags = ""
+longflags = []
+slugs = []
+for arg in ctx.args:
+	if arg[:2] == "--": longflags.append(arg[2:])
+	elif arg[0] == "-": shortflags += arg[1:]
+	else: slugs.append(arg)
 
 ops = [flag for flag in longflags if flag in ["sync", "upgrade", "downgrade", "remove", "toggle", "query", "search", "cc", "instance", "version"]]
 ops.extend([flag for flag in shortflags if flag in ["S", "U", "D", "R", "T", "Q", "F"]])
@@ -104,7 +107,7 @@ if not ops:
 
 if "asdeps" in longflags and "asexplicit" in longflags: raise SystemExit
 
-if ops[0] in ["instance", "version"] and slugs:
+if ops[0] in ["version"] and slugs:
 	print(f"error: this operation takes 0 arguments, {len(slugs)} given")
 	logger.error("user gave too many arguments")
 	raise SystemExit
